@@ -1339,6 +1339,7 @@ struct MainView: View {
     }.padding(24)
    }
   }.frame(minWidth: 950, minHeight: 650)
+   .background(SettingsWindowPresence())
    .onChange(of: language.preference) { _,_ in store.refresh() }
    .onChange(of: store.selected) { _, selected in
     if selected != store.learnedEndpoint {
@@ -1377,7 +1378,7 @@ struct KordaMenu: View {
   Button(store.hasBackgroundActivity ? L10n.tr("Pausar") : L10n.tr("Reanudar asignaciones")) {
    if store.hasBackgroundActivity { store.pauseBackground() } else { store.resumeBackground() }
   }.disabled(store.isRestoring)
-  Button(L10n.tr("Abrir ajustes")) { openWindow(id:"korda-settings"); NSApp.activate(ignoringOtherApps:true) }
+  Button(L10n.tr("Abrir ajustes")) { NSApp.setActivationPolicy(.regular); openWindow(id:"korda-settings"); NSApp.activate(ignoringOtherApps:true) }
   Divider()
   Toggle(L10n.tr("Iniciar con macOS"), isOn:Binding(get:{loginEnabled},set:{ desired in
    do {

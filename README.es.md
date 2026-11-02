@@ -13,6 +13,8 @@ Idioma de la aplicación: **Ajustes → General → Idioma**, con opciones Siste
 - Barra de menús: pausar, reanudar, abrir ajustes, salir e inicio opcional con macOS.
 - Reemplazo exclusivo experimental para controles HID++ 1B04 compatibles, con comprobación del desvío y restauración al pausar o salir normalmente.
 
+Al cerrar la ventana, Korda permanece en la barra de menús y oculta su icono del Dock. Abrir ajustes vuelve a mostrarlo.
+
 ## Compatibilidad y límites
 
 La compilación actual apunta a macOS 14 o posterior en Intel. Apple Silicon no está validado. Las pruebas físicas realizadas durante el desarrollo incluyen controles del M570 y funciones multimedia de K540/K400r; no constituyen garantía para todos los modelos o receptores.

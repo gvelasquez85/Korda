@@ -9,7 +9,7 @@ Experimental native macOS app for configuring compatible device controls. Curren
 - Browse USB devices, HID interfaces, audio outputs and cameras, with readable device names where identification is available.
 - Identify compatible wireless devices behind receivers using HID++ and manage pairing.
 - Assign supported buttons and keys to media actions, keyboard shortcuts, or an application you choose.
-- Keep assignments running from the menu bar, pause them, open settings, quit, or optionally start Korda with macOS.
+- Keep assignments running from the menu bar, pause them, open settings, quit, or optionally start Korda with macOS. Closing settings hides the Dock icon; reopening settings restores it.
 - Experimentally replace compatible HID++ 1B04 controls, with diversion readback and restoration on normal pause or quit.
 - Enable optional software volume and mute for a chosen digital audio output, then assign Korda volume actions to a device control.
 - Choose English, Spanish, or the system language under **Settings → General → Language**.
