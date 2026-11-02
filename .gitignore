@@ -1,0 +1,19 @@
+# Local artifacts and hardware evidence
+.DS_Store
+build/
+analysis/
+evidence/
+*.app/
+*.dmg
+*.pkg
+*.zip
+*.dSYM/
+*.log
+.env
+.env.*
+!.env.example
+# Historical investigation notes contain local paths/hardware identifiers.
+docs/*
+!docs/open-application.md
+!docs/publication-readiness.md
+!docs/digital-audio.md
