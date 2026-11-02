@@ -134,32 +134,32 @@ private final class ReceiverReportRegistration {
   guard !identityBusy, pendingManagement == nil, !featureBusy, let packet = command.packet, let store else { return }
   pendingManagement = command
   let result = packet.withUnsafeBufferPointer { IOHIDDeviceSetReport(device,kIOHIDReportTypeOutput,0x10,$0.baseAddress!,packet.count) }
-  guard result == kIOReturnSuccess else { pendingManagement = nil; store.managementFinished(endpoint:store.identity(device),command:command,accepted:false,message:"No se pudo enviar la orden (\(result)). No se reintenta automáticamente."); return }
+  guard result == kIOReturnSuccess else { pendingManagement = nil; store.managementFinished(endpoint:store.identity(device),command:command,accepted:false,message:L10n.tr("No se pudo enviar la orden ({{0}}). No se reintenta automáticamente.", String(describing: result))); return }
   managementTimer = Timer.scheduledTimer(withTimeInterval:2,repeats:false) { [weak self] _ in
    guard let self, let store = self.store, let command = self.pendingManagement else { return }
    self.pendingManagement = nil
-   store.managementFinished(endpoint:store.identity(self.device),command:command,accepted:false,message:"Sin respuesta a la orden. Su resultado es desconocido; consulta el inventario antes de repetirla.")
+   store.managementFinished(endpoint:store.identity(self.device),command:command,accepted:false,message:L10n.tr("Sin respuesta a la orden. Su resultado es desconocido; consulta el inventario antes de repetirla."))
   }
  }
  func discoverKeyboard(_ target:HIDDeviceIdentity) {
   guard !identityBusy, pendingManagement == nil, !featureBusy, diversionController?.busy != true, let store else { return }
   discoveryTarget = target; discoveryFeature = 0x1b04; discoveryIndex = 0; discoveryPosition = 0
   store.keyboardCatalogs.removeValue(forKey:target.key)
-  store.keyboardControls[target.key] = []; store.keyboardDiscoveryStatus[target.key] = "Consultando capacidades del teclado, sin modificar su configuración…"
+  store.keyboardControls[target.key] = []; store.keyboardDiscoveryStatus[target.key] = L10n.tr("Consultando capacidades del teclado, sin modificar su configuración…")
   store.keyboardDiscoveryTrace[target.key] = []
   sendFeature(index:0,function:0,parameters:[0x1b,0x04])
  }
  private func sendFeature(index:UInt8,function:UInt8,parameters:[UInt8]) {
-  guard let target = discoveryTarget, let store, store.verifiedIdentities[target.key]?.wirelessID == target.wirelessID, store.capturing else { finishDiscovery("Identidad o captura cambió. Consulta cancelada."); return }
+  guard let target = discoveryTarget, let store, store.verifiedIdentities[target.key]?.wirelessID == target.wirelessID, store.capturing else { finishDiscovery(L10n.tr("Identidad o captura cambió. Consulta cancelada.")); return }
   discoverySoftwareID = discoverySoftwareID == 15 ? 1 : discoverySoftwareID + 1
   let query = KeyboardFeatureQuery(slot:target.slot,featureIndex:index,function:function,softwareID:discoverySoftwareID,parameters:parameters)
-  guard let packet = query.packet else { finishDiscovery("Consulta rechazada por la política de sólo lectura."); return }
+  guard let packet = query.packet else { finishDiscovery(L10n.tr("Consulta rechazada por la política de sólo lectura.")); return }
   pendingFeature = query
-  let context = String(format:"Función %04X · índice %d · consulta %d · SWID %d",discoveryFeature,index,function,discoverySoftwareID)
-  store.keyboardDiscoveryTrace[target.key,default:[]].append("Enviada: " + context)
+  let context = String(format:L10n.tr("Función %04X · índice %d · consulta %d · SWID %d"),discoveryFeature,index,function,discoverySoftwareID)
+  store.keyboardDiscoveryTrace[target.key,default:[]].append(L10n.tr("Enviada: ") + context)
   let result = packet.withUnsafeBufferPointer { IOHIDDeviceSetReport(device,kIOHIDReportTypeOutput,0x10,$0.baseAddress!,packet.count) }
-  guard result == kIOReturnSuccess else { finishDiscovery("No se pudo enviar la consulta (\(result))."); return }
-  featureTimer = Timer.scheduledTimer(withTimeInterval:1.2,repeats:false) { [weak self] _ in self?.finishDiscovery("Sin respuesta: \(context). No se cambió la configuración del teclado.") }
+  guard result == kIOReturnSuccess else { finishDiscovery(L10n.tr("No se pudo enviar la consulta ({{0}}).", String(describing: result))); return }
+  featureTimer = Timer.scheduledTimer(withTimeInterval:1.2,repeats:false) { [weak self] _ in self?.finishDiscovery(L10n.tr("Sin respuesta: {{0}}. No se cambió la configuración del teclado.", String(describing: context))) }
  }
  private func finishDiscovery(_ message:String) {
   featureTimer?.invalidate(); featureTimer = nil; pendingFeature = nil
@@ -171,42 +171,42 @@ private final class ReceiverReportRegistration {
   store?.identityWorkDidChange()
  }
  private func consumeFeature(_ reply:KeyboardFeatureReply,query:KeyboardFeatureQuery) {
-  guard let target = discoveryTarget, let store, store.verifiedIdentities[target.key]?.wirelessID == target.wirelessID else { finishDiscovery("La identidad cambió. Consulta cancelada."); return }
+  guard let target = discoveryTarget, let store, store.verifiedIdentities[target.key]?.wirelessID == target.wirelessID else { finishDiscovery(L10n.tr("La identidad cambió. Consulta cancelada.")); return }
   switch reply {
   case .error(let code):
-   store.keyboardDiscoveryTrace[target.key,default:[]].append("Respuesta de error HID++ \(code), índice \(query.featureIndex), consulta \(query.function).")
+   store.keyboardDiscoveryTrace[target.key,default:[]].append(L10n.tr("Respuesta de error HID++ {{0}}, índice {{1}}, consulta {{2}}.", String(describing: code), String(describing: query.featureIndex), String(describing: query.function)))
    if query.permitsLegacyFallback(error:code), discoveryFeature == 0x1b04 {
-    store.keyboardDiscoveryStatus[target.key] = "La consulta 1B04 fue rechazada; comprobando la función alternativa 1B00…"
+    store.keyboardDiscoveryStatus[target.key] = L10n.tr("La consulta 1B04 fue rechazada; comprobando la función alternativa 1B00…")
     discoveryFeature = 0x1b00; sendFeature(index:0,function:0,parameters:[0x1b,0x00])
    } else {
-    let stage = query.featureIndex == 0 ? "búsqueda de función" : (query.function == 0 ? "cantidad de controles" : "detalle del control \(discoveryPosition + 1)")
-    finishDiscovery("La ruta HID++ rechazó \(stage), función \(String(format:"%04X",discoveryFeature)), índice \(query.featureIndex) (código \(code)); capacidad no determinada. No se modificó su configuración.")
+    let stage = query.featureIndex == 0 ? L10n.tr("búsqueda de función") : (query.function == 0 ? L10n.tr("cantidad de controles") : L10n.tr("detalle del control {{0}}", String(describing: discoveryPosition + 1)))
+    finishDiscovery(L10n.tr("La ruta HID++ rechazó {{0}}, función {{1}}, índice {{2}} (código {{3}}); capacidad no determinada. No se modificó su configuración.", String(describing: stage), String(describing: String(format:"%04X",discoveryFeature)), String(describing: query.featureIndex), String(describing: code)))
    }
   case .payload(let payload):
-   guard let first = payload.first else { finishDiscovery("Respuesta incompleta."); return }
+   guard let first = payload.first else { finishDiscovery(L10n.tr("Respuesta incompleta.")); return }
    if query.featureIndex == 0 {
-    store.keyboardDiscoveryTrace[target.key,default:[]].append("Búsqueda completada: índice recibido \(first).")
+    store.keyboardDiscoveryTrace[target.key,default:[]].append(L10n.tr("Búsqueda completada: índice recibido {{0}}.", String(describing: first)))
     if first == 0 {
      if discoveryFeature == 0x1b04 { discoveryFeature = 0x1b00; sendFeature(index:0,function:0,parameters:[0x1b,0x00]) }
-     else { finishDiscovery("El teclado no declara las funciones de controles 1B04 ni 1B00. La sustitución por esta ruta no está disponible.") }
+     else { finishDiscovery(L10n.tr("El teclado no declara las funciones de controles 1B04 ni 1B00. La sustitución por esta ruta no está disponible.")) }
      return
     }
     discoveryIndex = first; sendFeature(index:first,function:0,parameters:[])
    } else if query.function == 0 {
-    guard first <= 64 else { finishDiscovery("Catálogo fuera del límite de lectura (64 controles)."); return }
+    guard first <= 64 else { finishDiscovery(L10n.tr("Catálogo fuera del límite de lectura (64 controles).")); return }
     discoveryCount = first
-    guard first > 0 else { finishDiscovery("La función declarada no expone controles."); return }
+    guard first > 0 else { finishDiscovery(L10n.tr("La función declarada no expone controles.")); return }
     sendFeature(index:discoveryIndex,function:1,parameters:[0])
    } else {
     let control = discoveryFeature == 0x1b04 ? KeyboardControlInfo.parseV4(payload) : KeyboardControlInfo.parseV1(payload)
-    guard let control, control.cid != 0 else { finishDiscovery("Descriptor de control incompleto; se conservan sólo los datos recibidos."); return }
+    guard let control, control.cid != 0 else { finishDiscovery(L10n.tr("Descriptor de control incompleto; se conservan sólo los datos recibidos.")); return }
     store.keyboardControls[target.key,default:[]].append(control)
     discoveryPosition += 1
     if discoveryPosition < discoveryCount { sendFeature(index:discoveryIndex,function:1,parameters:[discoveryPosition]) }
     else {
      let count = store.keyboardControls[target.key]?.filter(\.isDivertable).count ?? 0
      store.keyboardCatalogs[target.key] = KeyboardFeatureCatalog(endpoint:target.endpoint,slot:target.slot,wirelessID:target.wirelessID,featureID:discoveryFeature,featureIndex:discoveryIndex,controls:store.keyboardControls[target.key] ?? [])
-     finishDiscovery("Lectura completada: \(discoveryCount) controles; \(count) declaran capacidad de desvío. Aún no se activó ningún reemplazo.")
+     finishDiscovery(L10n.tr("Lectura completada: {{0}} controles; {{1}} declaran capacidad de desvío. Aún no se activó ningún reemplazo.", String(describing: discoveryCount), String(describing: count)))
     }
    }
   }
@@ -219,22 +219,22 @@ private final class ReceiverReportRegistration {
   let packet = query.request
   let result = packet.withUnsafeBufferPointer { IOHIDDeviceSetReport(device,kIOHIDReportTypeOutput,0x10,$0.baseAddress!,packet.count) }
   if result != kIOReturnSuccess {
-   if unpairVerification != nil { unpairVerification = nil; store.managementStatus[store.identity(device)] = "Falló la lectura de verificación. No se envió la desvinculación; requiere una nueva confirmación." }
-   store.identificationErrors.append("\(store.identity(device)): consulta de lectura rechazada (\(result))"); store.identificationStatus = "No se pudo consultar una interfaz; revisa los errores de identificación"; pendingIdentity = nil; identityQueue = []; return
+   if unpairVerification != nil { unpairVerification = nil; store.managementStatus[store.identity(device)] = L10n.tr("Falló la lectura de verificación. No se envió la desvinculación; requiere una nueva confirmación.") }
+   store.identificationErrors.append(L10n.tr("{{0}}: consulta de lectura rechazada ({{1}})", String(describing: store.identity(device)), String(describing: result))); store.identificationStatus = L10n.tr("No se pudo consultar una interfaz; revisa los errores de identificación"); pendingIdentity = nil; identityQueue = []; return
   }
   identityTimer = Timer.scheduledTimer(withTimeInterval:0.8,repeats:false) { [weak self] _ in
    guard let self else { return }
    self.store?.identificationTimeouts += 1
    if self.unpairVerification != nil {
     self.unpairVerification = nil
-    if let store = self.store { store.managementStatus[store.identity(self.device)] = "No se pudo verificar la identidad actual. No se envió la desvinculación." }
+    if let store = self.store { store.managementStatus[store.identity(self.device)] = L10n.tr("No se pudo verificar la identidad actual. No se envió la desvinculación.") }
    }
    self.pendingIdentity = nil; self.nextIdentityQuery()
   }
  }
  func receive(reportID: UInt32, bytes: UnsafeMutablePointer<UInt8>, count: CFIndex) {
   guard let store else { return }
-  let metadata = String(format:"ID %02X · longitud %ld",reportID,count)
+  let metadata = String(format:L10n.tr("ID %02X · longitud %ld"),reportID,count)
   store.receiverReportCounts[metadata,default:0] += 1
   // ID10 and all unknown reports receive aggregate ID/length counting only.
   let expected: Int
@@ -259,8 +259,8 @@ private final class ReceiverReportRegistration {
   if let command = pendingManagement, let reply = command.parseReply(normalized) {
    managementTimer?.invalidate(); managementTimer = nil; pendingManagement = nil
    switch reply {
-   case .accepted: store.managementFinished(endpoint:store.identity(device),command:command,accepted:true,message:"Orden aceptada por el receptor. Actualizando inventario…")
-   case .rejected(let code): store.managementFinished(endpoint:store.identity(device),command:command,accepted:false,message:"El receptor rechazó la orden (HID++ \(code)).")
+   case .accepted: store.managementFinished(endpoint:store.identity(device),command:command,accepted:true,message:L10n.tr("Orden aceptada por el receptor. Actualizando inventario…"))
+   case .rejected(let code): store.managementFinished(endpoint:store.identity(device),command:command,accepted:false,message:L10n.tr("El receptor rechazó la orden (HID++ {{0}}).", String(describing: code)))
    }
    return
   }
@@ -273,7 +273,7 @@ private final class ReceiverReportRegistration {
    store.recordQueriedIdentity(query:query,reply:reply,device:device)
    if let verification = unpairVerification {
     unpairVerification = nil; identityQueue = []
-    guard reply.wirelessID == verification.wpid, query.slot == verification.slot else { store.managementStatus[store.identity(device)] = "La identidad cambió. No se envió la desvinculación."; return }
+    guard reply.wirelessID == verification.wpid, query.slot == verification.slot else { store.managementStatus[store.identity(device)] = L10n.tr("La identidad cambió. No se envió la desvinculación."); return }
     sendManagement(.unpair(slot:verification.slot)); return
    }
    DispatchQueue.main.async { [weak self] in self?.nextIdentityQuery() }
@@ -334,23 +334,23 @@ final class DeviceStore: ObservableObject {
   }.map { device in
    let isCamera = device.id.hasPrefix("camera:")
    let virtualMouse = device.name == "LogiVirtualHIDDevice"
-   let name = isCamera && device.name.hasPrefix("USB Camera VID:") ? "Cámara USB · vídeo" : (virtualMouse ? "Entrada virtual de ratón" : device.name)
-   return DeviceInfo(id:device.id,name:name,detail:isCamera ? "Interfaz de vídeo" : (virtualMouse ? "Interfaz HID virtual" : "Interfaz HID"),capabilities:device.capabilities,device:device.device)
+   let name = isCamera && device.name.hasPrefix("USB Camera VID:") ? L10n.tr("Cámara USB · vídeo") : (virtualMouse ? L10n.tr("Entrada virtual de ratón") : device.name)
+   return DeviceInfo(id:device.id,name:name,detail:isCamera ? L10n.tr("Interfaz de vídeo") : (virtualMouse ? L10n.tr("Interfaz HID virtual") : L10n.tr("Interfaz HID")),capabilities:device.capabilities,device:device.device)
   }
   for usb in usbDevices {
    let prefix = usb.hidPrefix
    let interfaces = devices.filter { device in prefix.map { device.id.hasPrefix($0 + ":") } ?? false }.sorted{$0.id < $1.id}
    let primary = interfaces.first(where:{$0.id.hasSuffix(":1:2")}) ?? interfaces.first(where:{!$0.capabilities.isEmpty}) ?? interfaces.first
    let pairedReceiver = prefix.map { identifiedReceivers.contains($0) } ?? false
-   let displayName = pairedReceiver ? "Receptor Unifying" : (usb.name == "Dispositivo USB" ? usb.category : (usb.name == "AppleUSBXHCI Root Hub Simulation" ? "Hub raíz del sistema" : usb.name))
-   rows.append(DeviceInfo(id:pairedReceiver ? usb.id : (primary?.id ?? usb.id),name:displayName,detail:pairedReceiver ? "Receptor USB · dispositivos identificados por separado" : usb.category,capabilities:primary?.capabilities ?? [],device:pairedReceiver ? nil : primary?.device,usb:usb))
+   let displayName = pairedReceiver ? L10n.tr("Receptor Unifying") : (usb.name == L10n.tr("Dispositivo USB") ? usb.category : (usb.name == "AppleUSBXHCI Root Hub Simulation" ? L10n.tr("Hub raíz del sistema") : usb.name))
+   rows.append(DeviceInfo(id:pairedReceiver ? usb.id : (primary?.id ?? usb.id),name:displayName,detail:pairedReceiver ? L10n.tr("Receptor USB · dispositivos identificados por separado") : usb.category,capabilities:primary?.capabilities ?? [],device:pairedReceiver ? nil : primary?.device,usb:usb))
   }
   for item in identified {
    let prefix = item.endpoint.components(separatedBy:":").prefix(3).joined(separator:":")
    let transport = devices.first { $0.id == prefix + ":1:2" }
-   rows.append(DeviceInfo(id:item.key,name:item.displayName,detail:item.categoryName + (capturing ? " · Identificado por HID++" : " · Identificación guardada · pausado"),capabilities:transport?.capabilities ?? [],device:transport?.device))
+   rows.append(DeviceInfo(id:item.key,name:item.displayName,detail:item.categoryName + (capturing ? L10n.tr(" · Identificado por HID++") : L10n.tr(" · Identificación guardada · pausado")),capabilities:transport?.capabilities ?? [],device:transport?.device))
   }
-  rows += audio.outputs.map { DeviceInfo(id:"audio|" + $0.id,name:$0.name,detail:"Salida de audio · control digital Korda",capabilities:[],device:nil) }
+  rows += audio.outputs.map { DeviceInfo(id:"audio|" + $0.id,name:$0.name,detail:L10n.tr("Salida de audio · control digital Korda"),capabilities:[],device:nil) }
   return rows.sorted { $0.name == $1.name ? $0.id < $1.id : $0.name < $1.name }
  }
  func transportID(for selection: String) -> String {
@@ -380,7 +380,7 @@ final class DeviceStore: ObservableObject {
   let prefix = source.components(separatedBy:":").prefix(3).joined(separator:":")
   return sidebarDevices.first(where:{$0.usb?.hidPrefix == prefix})?.id ?? sidebarDevices.first(where:{source.hasPrefix($0.id + ":")})?.id
  }
- func deviceLabel(for source: String) -> String { presentationSelection(for:source).flatMap { key in sidebarDevices.first(where:{$0.id == key})?.name } ?? "Dispositivo / receptor" }
+ func deviceLabel(for source: String) -> String { presentationSelection(for:source).flatMap { key in sidebarDevices.first(where:{$0.id == key})?.name } ?? L10n.tr("Dispositivo / receptor") }
  func chooseControl(_ source: String) { lastSource = source; learnedEndpoint = selected ?? ""; learning = false; lastEvent = Mapping(source:source,action:"",keyCode:0,modifiers:0).controlLabel }
  func standardRouteIsUsable(_ source: String) -> Bool {
   guard source.hasPrefix("1133:50475:") else { return true }
@@ -389,7 +389,7 @@ final class DeviceStore: ObservableObject {
   return keyboardRouteIsUnique(item)
  }
  @discardableResult func editMapping(_ mapping: Mapping) -> Bool {
-  guard let target = presentationSelection(for:mapping.source) else { actionStatus = "Reanuda e identifica el dispositivo antes de editar esta asignación."; return false }
+  guard let target = presentationSelection(for:mapping.source) else { actionStatus = L10n.tr("Reanuda e identifica el dispositivo antes de editar esta asignación."); return false }
   selected = target; chooseControl(mapping.source); return true
  }
  @Published var selected: String?
@@ -399,7 +399,7 @@ final class DeviceStore: ObservableObject {
  @Published var learnedEndpoint = ""
  @Published var receiverProfiles: [ReceiverMappingProfile] = []
  @Published var verifiedIdentities: [String:HIDDeviceIdentity] = [:]
- @Published var identificationStatus = "Identificación HID++ pendiente"
+ @Published var identificationStatus = L10n.tr("Identificación HID++ pendiente")
  @Published var identificationTimeouts = 0
  @Published var identificationErrors: [String] = []
  @Published var managementStatus: [String:String] = [:]
@@ -418,13 +418,13 @@ final class DeviceStore: ObservableObject {
  private var pairingTimers: [String:Timer] = [:]
  private var identityRefreshRequested = false
  var receiverEndpoints: [String] { devices.filter { $0.device.map(KnownReceiverReportLayout.accepts) ?? false }.map(\.id).sorted() }
- func receiverName(_ endpoint:String) -> String { "Receptor \((receiverEndpoints.firstIndex(of:endpoint) ?? 0) + 1)" }
+ func receiverName(_ endpoint:String) -> String { L10n.tr("Receptor {{0}}", String(describing: (receiverEndpoints.firstIndex(of:endpoint) ?? 0) + 1)) }
  func pairedDevices(_ endpoint:String) -> [HIDDeviceIdentity] { verifiedIdentities.values.filter{$0.endpoint == endpoint}.sorted{$0.slot < $1.slot} }
  func canManageReceiver(_ endpoint:String) -> Bool {
   !isRestoring && capturing && receiverDiagnosticsEnabled && receiverRegistrations.contains { identity($0.device) == endpoint && !$0.identityBusy && !$0.featureBusy && $0.pendingManagement == nil && $0.diversionController?.busy != true && $0.diversionController?.hasRestorationObligations != true }
  }
  func discoverKeyboard(_ target:HIDDeviceIdentity) {
-  guard target.kind == 1, [UInt16(0x4076),0x4024].contains(target.wirelessID), verifiedIdentities[target.key]?.wirelessID == target.wirelessID, canManageReceiver(target.endpoint), pairingDeadlines[target.endpoint] == nil, let registration = receiverRegistrations.first(where:{identity($0.device) == target.endpoint}) else { keyboardDiscoveryStatus[target.key] = "Espera a que termine la identificación y comprueba que el teclado esté encendido."; return }
+  guard target.kind == 1, [UInt16(0x4076),0x4024].contains(target.wirelessID), verifiedIdentities[target.key]?.wirelessID == target.wirelessID, canManageReceiver(target.endpoint), pairingDeadlines[target.endpoint] == nil, let registration = receiverRegistrations.first(where:{identity($0.device) == target.endpoint}) else { keyboardDiscoveryStatus[target.key] = L10n.tr("Espera a que termine la identificación y comprueba que el teclado esté encendido."); return }
   registration.discoverKeyboard(target)
  }
  func prepareReceiverManagement() {
@@ -434,17 +434,17 @@ final class DeviceStore: ObservableObject {
   identifyDevices()
  }
  func manageReceiver(_ endpoint:String, command:ReceiverManagementCommand, expectedWPID:UInt16? = nil) {
-  guard canManageReceiver(endpoint), let registration = receiverRegistrations.first(where:{identity($0.device) == endpoint}) else { managementStatus[endpoint] = "Autoriza Korda, inicia captura y espera a que termine la identificación."; return }
-  if command == .openPairing, pairedDevices(endpoint).count >= 6 { managementStatus[endpoint] = "El receptor tiene seis posiciones ocupadas. Quita un dispositivo antes de añadir otro."; return }
+  guard canManageReceiver(endpoint), let registration = receiverRegistrations.first(where:{identity($0.device) == endpoint}) else { managementStatus[endpoint] = L10n.tr("Autoriza Korda, inicia captura y espera a que termine la identificación."); return }
+  if command == .openPairing, pairedDevices(endpoint).count >= 6 { managementStatus[endpoint] = L10n.tr("El receptor tiene seis posiciones ocupadas. Quita un dispositivo antes de añadir otro."); return }
   if let slot = command.slot {
-   guard let expectedWPID, let target = verifiedIdentities[endpoint + "|slot=\(slot)"], target.wirelessID == expectedWPID else { managementStatus[endpoint] = "La identidad seleccionada ya no coincide. Actualiza el inventario."; return }
+   guard let expectedWPID, let target = verifiedIdentities[endpoint + "|slot=\(slot)"], target.wirelessID == expectedWPID else { managementStatus[endpoint] = L10n.tr("La identidad seleccionada ya no coincide. Actualiza el inventario."); return }
    managementSuspendedEndpoints.insert(endpoint)
-   managementStatus[endpoint] = "Verificando identidad de \(target.displayName) antes de desvincular…"
+   managementStatus[endpoint] = L10n.tr("Verificando identidad de {{0}} antes de desvincular…", String(describing: target.displayName))
    registration.verifyAndUnpair(slot:slot,wpid:expectedWPID)
   } else {
    managementSuspendedEndpoints.insert(endpoint)
    if command == .openPairing { watchPairingWindow(endpoint) }
-   managementStatus[endpoint] = "Enviando \(command.label)…"
+   managementStatus[endpoint] = L10n.tr("Enviando {{0}}…", String(describing: command.label))
    registration.sendManagement(command)
   }
  }
@@ -453,14 +453,14 @@ final class DeviceStore: ObservableObject {
   pairingTimers[endpoint]?.invalidate()
   pairingTimers[endpoint] = Timer.scheduledTimer(withTimeInterval:61,repeats:false) { [weak self] _ in
    guard let self else { return }; self.pairingDeadlines.removeValue(forKey:endpoint)
-   self.managementStatus[endpoint] = "Finalizó el plazo de emparejamiento. Consultando dispositivos; la detección confirma el resultado."
+   self.managementStatus[endpoint] = L10n.tr("Finalizó el plazo de emparejamiento. Consultando dispositivos; la detección confirma el resultado.")
    self.identifyDevices()
   }
  }
  func managementFinished(endpoint:String,command:ReceiverManagementCommand,accepted:Bool,message:String) {
   managementStatus[endpoint] = message
   if accepted, command == .openPairing {
-   managementStatus[endpoint] = pairingDeadlines[endpoint] != nil ? "Orden de emparejamiento aceptada. Apaga y enciende sólo el dispositivo que quieras añadir. Plazo: 60 segundos." : "Orden aceptada; el receptor ya informó el cierre del emparejamiento. Actualiza el inventario."
+   managementStatus[endpoint] = pairingDeadlines[endpoint] != nil ? L10n.tr("Orden de emparejamiento aceptada. Apaga y enciende sólo el dispositivo que quieras añadir. Plazo: 60 segundos.") : L10n.tr("Orden aceptada; el receptor ya informó el cierre del emparejamiento. Actualiza el inventario.")
   } else {
    if accepted, command == .closePairing { pairingDeadlines.removeValue(forKey:endpoint); pairingTimers[endpoint]?.invalidate() }
    if accepted, let slot = command.slot {
@@ -472,7 +472,7 @@ final class DeviceStore: ObservableObject {
   }
  }
  func recordPairingNotification(_ notification:ReceiverPairingNotification,endpoint:String) {
-  managementStatus[endpoint] = notification.error == 0 ? (notification.open ? "El receptor informa: emparejamiento abierto." : "El receptor informa: emparejamiento cerrado. Actualizando inventario…") : "Error de emparejamiento del receptor: \(notification.error)."
+  managementStatus[endpoint] = notification.error == 0 ? (notification.open ? L10n.tr("El receptor informa: emparejamiento abierto.") : L10n.tr("El receptor informa: emparejamiento cerrado. Actualizando inventario…")) : L10n.tr("Error de emparejamiento del receptor: {{0}}.", String(describing: notification.error))
   if !notification.open {
    pairingDeadlines.removeValue(forKey:endpoint); pairingTimers[endpoint]?.invalidate()
    DispatchQueue.main.asyncAfter(deadline:.now()+0.2) { [weak self] in self?.identifyDevices() }
@@ -480,7 +480,7 @@ final class DeviceStore: ObservableObject {
  }
  @Published var actionStatus = ""
  private var receiverMappingRuntime = ReceiverMappingRuntime()
- @Published var lastEvent = "Sin eventos"
+ @Published var lastEvent = L10n.tr("Sin eventos")
  @Published var recentEvents: [String] = []
  @Published var status = ""
  @Published var mappings: [Mapping] = []
@@ -494,7 +494,7 @@ final class DeviceStore: ObservableObject {
  @Published var rawInterfaceCount = 0
  private var rawRegistrations: [MouseReportRegistration] = []
  @Published var receiverDiagnosticsEnabled = false { didSet {
-  if !receiverDiagnosticsEnabled && hasExclusiveObligations { receiverDiagnosticsEnabled = true; exclusiveStatus = "Pausa Korda para restaurar las teclas antes de cerrar esta conexión."; return }
+  if !receiverDiagnosticsEnabled && hasExclusiveObligations { receiverDiagnosticsEnabled = true; exclusiveStatus = L10n.tr("Pausa Korda para restaurar las teclas antes de cerrar esta conexión."); return }
   configureReceiverDiagnostics()
  } }
  @Published var receiverInterfaceCount = 0
@@ -536,24 +536,24 @@ final class DeviceStore: ObservableObject {
   var rows = hid.map { device -> DeviceInfo in
    let elements = (IOHIDDeviceCopyMatchingElements(device, nil, 0) as? [IOHIDElement]) ?? []
    let controls = Set(elements.filter { CapturePolicy.allows(page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0)) }.map {
-    CapturePolicy.label(page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0)) + String(format: " · rango %ld…%ld", IOHIDElementGetLogicalMin($0), IOHIDElementGetLogicalMax($0))
+    CapturePolicy.label(page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0)) + String(format: L10n.tr(" · rango %ld…%ld"), IOHIDElementGetLogicalMin($0), IOHIDElementGetLogicalMax($0))
    }).sorted()
    return DeviceInfo(id: identity(device), name: property(device, kIOHIDProductKey), detail: "HID · VID \(property(device, kIOHIDVendorIDKey)) · PID \(property(device, kIOHIDProductIDKey)) · \(property(device, kIOHIDTransportKey))", capabilities: controls, device: device)
   }
   let cameras = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .externalUnknown], mediaType: .video, position: .unspecified).devices
-  rows += cameras.map { DeviceInfo(id: "camera:" + $0.uniqueID, name: $0.localizedName, detail: "Cámara · inventario sin abrir vídeo", capabilities: ["La configuración UVC de esta cámara aún no está implementada."], device: nil) }
+  rows += cameras.map { DeviceInfo(id: "camera:" + $0.uniqueID, name: $0.localizedName, detail: L10n.tr("Cámara · inventario sin abrir vídeo"), capabilities: [L10n.tr("La configuración UVC de esta cámara aún no está implementada.")], device: nil) }
   var seen = Set<String>()
   devices = rows.filter { seen.insert($0.id).inserted }.sorted { $0.name < $1.name }
   let input = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
-  status = "Monitorización: \(input == kIOHIDAccessTypeGranted ? "autorizada" : "sin autorización confirmada") · Accesibilidad: \(AXIsProcessTrusted() ? "autorizada" : "sin autorización")"
+  status = L10n.tr("Monitorización: {{0}} · Accesibilidad: {{1}}", String(describing: input == kIOHIDAccessTypeGranted ? L10n.tr("autorizada") : L10n.tr("sin autorización confirmada")), String(describing: AXIsProcessTrusted() ? L10n.tr("autorizada") : L10n.tr("sin autorización")))
  }
  func start() {
   let result = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
   capturing = result == kIOReturnSuccess
-  lastEvent = capturing ? "Pulsa un botón; se seleccionará automáticamente la interfaz emisora" : "No se pudo abrir HID: \(result)"
+  lastEvent = capturing ? L10n.tr("Pulsa un botón; se seleccionará automáticamente la interfaz emisora") : L10n.tr("No se pudo abrir HID: {{0}}", String(describing: result))
  }
  func resumeBackground() {
-  guard !isRestoring, !hasExclusiveObligations else { exclusiveStatus = "Completa primero la restauración de las teclas."; return }
+  guard !isRestoring, !hasExclusiveObligations else { exclusiveStatus = L10n.tr("Completa primero la restauración de las teclas."); return }
   start()
   guard capturing else { return }
   learning = false
@@ -577,7 +577,7 @@ final class DeviceStore: ObservableObject {
   if isRestoring { return }
   let controllers = receiverRegistrations.compactMap(\.diversionController).filter{$0.hasRestorationObligations || $0.busy}
   guard !controllers.isEmpty else { finishStop(); return }
-  isRestoring = true; exclusiveStatus = "Restaurando las funciones originales antes de pausar…"
+  isRestoring = true; exclusiveStatus = L10n.tr("Restaurando las funciones originales antes de pausar…")
   var remaining = controllers.count; var allOK = true
   for controller in controllers {
    controller.restoreAll { [weak self] ok,_ in
@@ -585,9 +585,9 @@ final class DeviceStore: ObservableObject {
     allOK = allOK && ok; remaining -= 1
     guard remaining == 0 else { return }
     self.isRestoring = false
-    if allOK && !self.hasExclusiveObligations { self.exclusiveStatus = "Funciones originales restauradas y verificadas."; self.finishStop() }
+    if allOK && !self.hasExclusiveObligations { self.exclusiveStatus = L10n.tr("Funciones originales restauradas y verificadas."); self.finishStop() }
     else {
-     self.exclusiveStatus = "No se confirmó la restauración. Enciende o reconecta el teclado y vuelve a pausar o salir. Korda conserva la conexión pendiente."
+     self.exclusiveStatus = L10n.tr("No se confirmó la restauración. Enciende o reconecta el teclado y vuelve a pausar o salir. Korda conserva la conexión pendiente.")
      let callbacks = self.stopCompletions; self.stopCompletions = []; callbacks.forEach{$0(false)}
     }
    }
@@ -598,7 +598,7 @@ final class DeviceStore: ObservableObject {
   let callbacks = stopCompletions; stopCompletions = []; callbacks.forEach{$0(true)}
  }
  func configureReceiverDiagnostics() {
-  if hasExclusiveObligations { exclusiveStatus = "Pausa Korda para restaurar las teclas antes de reconstruir la conexión."; return }
+  if hasExclusiveObligations { exclusiveStatus = L10n.tr("Pausa Korda para restaurar las teclas antes de reconstruir la conexión."); return }
   receiverMappingRuntime.reset()
   receiverRegistrations.removeAll(); receiverInterfaceCount = 0; receiverOpenResults = []
   guard receiverDiagnosticsEnabled, capturing else { return }
@@ -606,19 +606,19 @@ final class DeviceStore: ObservableObject {
   let hid = (IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice>) ?? []
   for device in hid where KnownReceiverReportLayout.accepts(device) {
    let result = IOHIDDeviceOpen(device,IOOptionBits(kIOHIDOptionsTypeNone))
-   receiverOpenResults.append("\(identity(device)) · apertura no exclusiva: \(result)")
+   receiverOpenResults.append(L10n.tr("{{0}} · apertura no exclusiva: {{1}}", String(describing: identity(device)), String(describing: result)))
    if result == kIOReturnSuccess { receiverRegistrations.append(ReceiverReportRegistration(device:device,store:self)) }
   }
   receiverInterfaceCount = receiverRegistrations.count
   if receiverProfiles.contains(where: \.enrolled) || mappings.contains(where:{$0.source.hasPrefix("keyboard|") && $0.isEnabled}) { identifyDevices() }
  }
  func identifyDevices() {
-  guard capturing, receiverDiagnosticsEnabled, !receiverRegistrations.isEmpty else { identificationStatus = "Inicia la captura y la lectura del receptor para identificar dispositivos"; return }
+  guard capturing, receiverDiagnosticsEnabled, !receiverRegistrations.isEmpty else { identificationStatus = L10n.tr("Inicia la captura y la lectura del receptor para identificar dispositivos"); return }
   guard !receiverRegistrations.contains(where: { $0.identityBusy || $0.featureBusy || $0.pendingManagement != nil }) else { identityRefreshRequested = true; return }
   identityRefreshRequested = false
   verifiedIdentities.removeAll(); identificationTimeouts = 0; identificationErrors = []
   keyboardControls = [:]; keyboardCatalogs = [:]; keyboardDiscoveryStatus = [:]; keyboardDiscoveryTrace = [:]
-  identificationStatus = "Consultando nombre, tipo e identificador de posiciones emparejadas…"
+  identificationStatus = L10n.tr("Consultando nombre, tipo e identificador de posiciones emparejadas…")
   for registration in receiverRegistrations { registration.identifyDevices() }
  }
  func identityWorkDidChange() {
@@ -629,7 +629,7 @@ final class DeviceStore: ObservableObject {
    return
   }
   for endpoint in Array(managementSuspendedEndpoints) where pairingDeadlines[endpoint] == nil && !receiverRegistrations.contains(where:{identity($0.device) == endpoint && $0.pendingManagement != nil}) { managementSuspendedEndpoints.remove(endpoint) }
-  identificationStatus = "Consulta finalizada: \(verifiedIdentities.count) identidades; \(identificationTimeouts) consultas sin respuesta. Las posiciones vacías pueden no responder."
+  identificationStatus = L10n.tr("Consulta finalizada: {{0}} identidades; {{1}} consultas sin respuesta. Las posiciones vacías pueden no responder.", String(describing: verifiedIdentities.count), String(describing: identificationTimeouts))
   resumeExclusiveMappingsIfPossible()
  }
  func invalidateIdentity(endpoint: String, slot: UInt8) {
@@ -649,7 +649,7 @@ final class DeviceStore: ObservableObject {
   } else if let name = reply.name, var current = verifiedIdentities[key] {
    current.name = name; verifiedIdentities[key] = current
   }
-  identificationStatus = "\(verifiedIdentities.count) identidades HID++ recibidas. Una posición emparejada puede estar apagada."
+  identificationStatus = L10n.tr("{{0}} identidades HID++ recibidas. Una posición emparejada puede estar apagada.", String(describing: verifiedIdentities.count))
  }
 
  func recordReceiverIdentity(_ observation: ReceiverIdentity, device: IOHIDDevice) {
@@ -659,7 +659,7 @@ final class DeviceStore: ObservableObject {
  func enrollReceiverProfile(_ profile: ReceiverMappingProfile, enabled: Bool) {
   guard let index = receiverProfiles.firstIndex(where: { $0.id == profile.id }) else { return }
   if enabled {
-   guard let identified = verifiedIdentities[profile.endpoint + "|slot=\(profile.slot)"] else { identificationStatus = "Identifica este dispositivo mediante HID++ antes de habilitar la ruta"; return }
+   guard let identified = verifiedIdentities[profile.endpoint + "|slot=\(profile.slot)"] else { identificationStatus = L10n.tr("Identifica este dispositivo mediante HID++ antes de habilitar la ruta"); return }
    receiverProfiles[index].verifiedWirelessID = identified.wirelessID
   }
   receiverProfiles[index].enrolled = enabled
@@ -682,7 +682,7 @@ final class DeviceStore: ObservableObject {
   let profile = receiverProfiles.first(where:{$0.id == observedProfile.id}) ?? observedProfile
   let key = "\(endpoint) · slot \(observation.slot)"
   receiverAcceptedCounts[key + " · " + route.label,default:0] += 1
-  let model = observedM570Slots.contains(key) ? "M570 identificado por notificación" : "modelo no identificado"
+  let model = observedM570Slots.contains(key) ? L10n.tr("M570 identificado por notificación") : L10n.tr("modelo no identificado")
   receiverMappingRuntime.listening = capturing && receiverDiagnosticsEnabled
   receiverMappingRuntime.executionEnabled = enabled
   let enrolled = Set(receiverProfiles.filter { profile in
@@ -691,7 +691,7 @@ final class DeviceStore: ObservableObject {
   }.map(\.id))
   for change in observation.changes {
    let timestamp = Date().formatted(date:.omitted,time:.standard)
-   let direction = change.isDown ? "pulsado" : "soltado"
+   let direction = change.isDown ? L10n.tr("pulsado") : L10n.tr("soltado")
    receiverEvents.insert("\(timestamp) · \(key) · \(route.label) · \(model) · \(profile.buttonLabel(change.button)) \(direction)",at:0)
    let decision = receiverMappingRuntime.consume(profile:profile,button:change.button,isDown:change.isDown,enrolled:enrolled)
    if decision.learn && learning {
@@ -714,8 +714,8 @@ final class DeviceStore: ObservableObject {
  func recordRawButton(_ change: MouseButtonChange, device: IOHIDDevice) {
   rawButtonCount += 1
   let timestamp = Date().formatted(date: .omitted, time: .standard)
-  let direction = change.isDown ? "pulsado" : "soltado"
-  rawEvents.insert("\(timestamp) · informe2 · botón \(change.button) \(direction) · \(identity(device))", at: 0)
+  let direction = change.isDown ? L10n.tr("pulsado") : L10n.tr("soltado")
+  rawEvents.insert(L10n.tr("{{0}} · informe2 · botón {{1}} {{2}} · {{3}}", String(describing: timestamp), String(describing: change.button), String(describing: direction), String(describing: identity(device))), at: 0)
   rawEvents = Array(rawEvents.prefix(10))
   // Diagnostic only: never use this path to create or execute a mapping.
  }
@@ -743,13 +743,13 @@ final class DeviceStore: ObservableObject {
   if enabled, standardRouteIsUsable(source), let mapping = mappings.first(where: { $0.source == source && $0.isEnabled }) { perform(mapping) }
  }
  func save(action: String, keyCode: UInt16, modifiers: UInt64, application:ApplicationTarget? = nil,audioOutputUID:String? = nil) {
-  if action == "launchApplication", application == nil { actionStatus = "Elige una aplicación antes de guardar."; return }
-  if ["digitalVolumeUp","digitalVolumeDown","digitalMute"].contains(action), audioOutputUID?.isEmpty != false { actionStatus = "Elige una salida de audio."; return }
+  if action == "launchApplication", application == nil { actionStatus = L10n.tr("Elige una aplicación antes de guardar."); return }
+  if ["digitalVolumeUp","digitalVolumeDown","digitalMute"].contains(action), audioOutputUID?.isEmpty != false { actionStatus = L10n.tr("Elige una salida de audio."); return }
   if action == "original" { restoreSelectedOriginal(); return }
-  guard !lastSource.isEmpty, selected == learnedEndpoint else { actionStatus = "Selecciona primero el control que quieres configurar."; return }
-  if lastSource.hasPrefix("keyboard|") { actionStatus = "Este control tiene un reemplazo exclusivo. Restablece su función original antes de crear una acción adicional."; return }
-  if !lastSource.hasPrefix("receiver|"), !standardRouteIsUsable(lastSource) { actionStatus = "La ruta del teclado no está identificada o la comparten varios teclados."; return }
-  if lastSource.hasPrefix("receiver|"), !receiverProfiles.contains(where:{$0.enrolled && lastSource.hasPrefix($0.id + "|button=")}) { actionStatus = "La ruta propietaria aún no está autorizada para asignaciones. Revísala en Ajustes → Diagnósticos."; return }
+  guard !lastSource.isEmpty, selected == learnedEndpoint else { actionStatus = L10n.tr("Selecciona primero el control que quieres configurar."); return }
+  if lastSource.hasPrefix("keyboard|") { actionStatus = L10n.tr("Este control tiene un reemplazo exclusivo. Restablece su función original antes de crear una acción adicional."); return }
+  if !lastSource.hasPrefix("receiver|"), !standardRouteIsUsable(lastSource) { actionStatus = L10n.tr("La ruta del teclado no está identificada o la comparten varios teclados."); return }
+  if lastSource.hasPrefix("receiver|"), !receiverProfiles.contains(where:{$0.enrolled && lastSource.hasPrefix($0.id + "|button=")}) { actionStatus = L10n.tr("La ruta propietaria aún no está autorizada para asignaciones. Revísala en Ajustes → Diagnósticos."); return }
   if let previous = selectedMapping,previous.source.hasPrefix("keyboard|"),previous.source != lastSource {
    let source = lastSource
    restoreMapping(previous) { [weak self] ok in
@@ -766,7 +766,7 @@ final class DeviceStore: ObservableObject {
   mappings.append(Mapping(source: source, action: action, keyCode: keyCode, modifiers: modifiers,isEnabled:wasEnabled,application:application,audioOutputUID:audioOutputUID))
   learning = false
   persist()
-  actionStatus = updating ? "Asignación actualizada." : "Asignación guardada."
+  actionStatus = updating ? L10n.tr("Asignación actualizada.") : L10n.tr("Asignación guardada.")
  }
  private func exclusiveCandidate() -> (KeyboardFeatureCatalog,KeyboardControlInfo,ReceiverReportRegistration)? {
   guard let selected, let catalog = keyboardCatalogs[selected], verifiedIdentities[selected]?.wirelessID == catalog.wirelessID else { return nil }
@@ -794,26 +794,26 @@ final class DeviceStore: ObservableObject {
   return exclusiveCandidate() != nil && capturing && !isRestoring
  }
  func saveExclusive(action:String,keyCode:UInt16,modifiers:UInt64,application:ApplicationTarget? = nil,audioOutputUID:String? = nil) {
-  if action == "launchApplication", application == nil { actionStatus = "Elige una aplicación antes de guardar."; return }
-  if ["digitalVolumeUp","digitalVolumeDown","digitalMute"].contains(action), audioOutputUID?.isEmpty != false { actionStatus = "Elige una salida de audio."; return }
+  if action == "launchApplication", application == nil { actionStatus = L10n.tr("Elige una aplicación antes de guardar."); return }
+  if ["digitalVolumeUp","digitalVolumeDown","digitalMute"].contains(action), audioOutputUID?.isEmpty != false { actionStatus = L10n.tr("Elige una salida de audio."); return }
   if action == "original" { restoreSelectedOriginal(); return }
-  guard !isRestoring,capturing,AXIsProcessTrusted(),keyCode <= 127 else { actionStatus = "Activa Korda y comprueba sus permisos antes de reemplazar una tecla."; return }
+  guard !isRestoring,capturing,AXIsProcessTrusted(),keyCode <= 127 else { actionStatus = L10n.tr("Activa Korda y comprueba sus permisos antes de reemplazar una tecla."); return }
   if lastSource.hasPrefix("keyboard|"),receiverRegistrations.contains(where:{$0.diversionController?.isActive(source:lastSource) == true}) {
    let wasEnabled = mappings.first(where:{$0.source == lastSource})?.isEnabled ?? true
-   mappings.removeAll{$0.source == lastSource};mappings.append(Mapping(source:lastSource,action:action,keyCode:keyCode,modifiers:modifiers,isEnabled:wasEnabled,application:application,audioOutputUID:audioOutputUID));persist();actionStatus = "Reemplazo actualizado.";return
+   mappings.removeAll{$0.source == lastSource};mappings.append(Mapping(source:lastSource,action:action,keyCode:keyCode,modifiers:modifiers,isEnabled:wasEnabled,application:application,audioOutputUID:audioOutputUID));persist();actionStatus = L10n.tr("Reemplazo actualizado.");return
   }
-  guard let (catalog,control,registration) = exclusiveCandidate(),let controller = registration.diversionController,let usage = control.consumerUsage else { actionStatus = "Consulta la compatibilidad de este teclado en Ajustes → Diagnósticos. Sólo se reemplazan controles 1B04 que declaren desvío."; return }
+  guard let (catalog,control,registration) = exclusiveCandidate(),let controller = registration.diversionController,let usage = control.consumerUsage else { actionStatus = L10n.tr("Consulta la compatibilidad de este teclado en Ajustes → Diagnósticos. Sólo se reemplazan controles 1B04 que declaren desvío."); return }
   let source = exclusiveSource(catalog,control:control,usage:usage)
   let nativeSource = lastSource
   let lease = KeyboardDiversionLease(endpoint:catalog.endpoint,slot:catalog.slot,wirelessID:catalog.wirelessID,featureIndex:catalog.featureIndex,cid:control.cid,capabilityFlags:control.flags)
-  actionStatus = "Comprobando el estado original y activando el reemplazo…"
+  actionStatus = L10n.tr("Comprobando el estado original y activando el reemplazo…")
   controller.activate(source:source,lease:lease) { [weak self] ok,message in
    guard let self else { return }
    guard ok,!self.isRestoring else { self.actionStatus = message;return }
    self.mappings.removeAll{$0.source == source || $0.source == nativeSource}
    self.mappings.append(Mapping(source:source,action:action,keyCode:keyCode,modifiers:modifiers,application:application,audioOutputUID:audioOutputUID));self.persist()
    self.lastSource = source;self.learning = false;self.enabled = true
-   self.actionStatus = "Reemplazo activado y estado de desvío verificado. Comprueba el resultado con la tecla."
+   self.actionStatus = L10n.tr("Reemplazo activado y estado de desvío verificado. Comprueba el resultado con la tecla.")
   }
  }
  func executeExclusive(_ source:String) {
@@ -825,7 +825,7 @@ final class DeviceStore: ObservableObject {
   perform(mapping)
  }
  func restoreSelectedOriginal() {
-  guard let mapping = selectedMapping else { actionStatus = "Este control no tiene ninguna asignación de Korda."; return }
+  guard let mapping = selectedMapping else { actionStatus = L10n.tr("Este control no tiene ninguna asignación de Korda."); return }
   remove(mapping)
  }
  func isExclusiveMappingActive(_ mapping:Mapping) -> Bool { receiverRegistrations.contains{$0.diversionController?.isActive(source:mapping.source) == true} }
@@ -846,7 +846,7 @@ final class DeviceStore: ObservableObject {
  }
  func remove(_ mapping: Mapping) {
   restoreMapping(mapping) { [weak self] ok in
-   guard let self,ok else { return };self.mappings.removeAll{$0.id == mapping.id};self.persist();self.actionStatus = "Asignación eliminada. Korda no aplica esta acción."
+   guard let self,ok else { return };self.mappings.removeAll{$0.id == mapping.id};self.persist();self.actionStatus = L10n.tr("Asignación eliminada. Korda no aplica esta acción.")
   }
  }
  private func catalogMatch(_ mapping:Mapping) -> (KeyboardFeatureCatalog,KeyboardControlInfo,ReceiverReportRegistration)? {
@@ -860,7 +860,7 @@ final class DeviceStore: ObservableObject {
   return nil
  }
  private func activateSavedExclusive(_ mapping:Mapping,completion:@escaping(Bool)->Void) {
-  guard enabled,!isRestoring,let (catalog,control,registration) = catalogMatch(mapping),!registration.identityBusy,!registration.featureBusy,registration.pendingManagement == nil,let controller = registration.diversionController else { actionStatus = "Reanuda Korda y consulta la compatibilidad del teclado para aplicar este reemplazo.";completion(false);return }
+  guard enabled,!isRestoring,let (catalog,control,registration) = catalogMatch(mapping),!registration.identityBusy,!registration.featureBusy,registration.pendingManagement == nil,let controller = registration.diversionController else { actionStatus = L10n.tr("Reanuda Korda y consulta la compatibilidad del teclado para aplicar este reemplazo.");completion(false);return }
   let lease = KeyboardDiversionLease(endpoint:catalog.endpoint,slot:catalog.slot,wirelessID:catalog.wirelessID,featureIndex:catalog.featureIndex,cid:control.cid,capabilityFlags:control.flags)
   controller.activate(source:mapping.source,lease:lease) { [weak self] ok,message in self?.actionStatus = message;completion(ok) }
  }
@@ -885,17 +885,17 @@ final class DeviceStore: ObservableObject {
  }
  @discardableResult func perform(_ mapping: Mapping) -> Bool {
   if mapping.isDigitalVolumeAction {
-   guard let uid = mapping.audioOutputUID,audio.isProcessing,audio.activeOutputUID == uid else { actionStatus = "Activa primero el control digital de la salida elegida en Dispositivos o Ajustes → Sonido."; return false }
+   guard let uid = mapping.audioOutputUID,audio.isProcessing,audio.activeOutputUID == uid else { actionStatus = L10n.tr("Activa primero el control digital de la salida elegida en Dispositivos o Ajustes → Sonido."); return false }
    switch mapping.action {
    case "digitalVolumeUp":audio.adjust(step:1.0/16)
    case "digitalVolumeDown":audio.adjust(step:-1.0/16)
    default:audio.toggleMute()
    }
-   actionStatus = audio.isMuted ? "Salida silenciada por Korda." : "Volumen Korda: " + String(Int(audio.level * 100)) + "%"
+   actionStatus = audio.isMuted ? L10n.tr("Salida silenciada por Korda.") : L10n.tr("Volumen Korda: ") + String(Int(audio.level * 100)) + "%"
    return true
   }
   if mapping.action == "launchApplication" {
-   guard let target = mapping.application else { actionStatus = "Elige una aplicación para esta asignación."; return false }
+   guard let target = mapping.application else { actionStatus = L10n.tr("Elige una aplicación para esta asignación."); return false }
    var candidates: [URL] = []
    if let bookmark = target.bookmark {
     var stale = false
@@ -906,37 +906,37 @@ final class DeviceStore: ObservableObject {
    guard let url = candidates.first(where:{ candidate in
     guard candidate.isFileURL,let values = try? candidate.resourceValues(forKeys:[.isApplicationKey]),values.isApplication == true,let bundle = Bundle(url:candidate) else { return false }
     return target.bundleIdentifier == nil || bundle.bundleIdentifier == target.bundleIdentifier
-   }) else { actionStatus = "No se encuentra " + target.name + ". Vuelve a elegir la aplicación."; return false }
+   }) else { actionStatus = L10n.tr("No se encuentra ") + target.name + L10n.tr(". Vuelve a elegir la aplicación."); return false }
    NSWorkspace.shared.openApplication(at:url,configuration:NSWorkspace.OpenConfiguration()) { [weak self] app,error in
     DispatchQueue.main.async {
-     self?.actionStatus = error.map { "No se pudo abrir " + target.name + ": " + $0.localizedDescription } ?? (app == nil ? "macOS no confirmó la apertura." : target.name + " abierta.")
+     self?.actionStatus = error.map { L10n.tr("No se pudo abrir ") + target.name + ": " + $0.localizedDescription } ?? (app == nil ? L10n.tr("macOS no confirmó la apertura.") : target.name + L10n.tr(" abierta."))
     }
    }
-   actionStatus = "Abriendo " + target.name + "…"; return true
+   actionStatus = L10n.tr("Abriendo ") + target.name + "…"; return true
   }
-  guard AXIsProcessTrusted() else { actionStatus = "La emisión requiere Accesibilidad para esta aplicación"; return false }
+  guard AXIsProcessTrusted() else { actionStatus = L10n.tr("La emisión requiere Accesibilidad para esta aplicación"); return false }
   if mapping.action == "launchCalculator" {
-   guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier:"com.apple.calculator") else { actionStatus = "Calculadora no disponible"; return false }
+   guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier:"com.apple.calculator") else { actionStatus = L10n.tr("Calculadora no disponible"); return false }
    NSWorkspace.shared.openApplication(at:url,configuration:NSWorkspace.OpenConfiguration())
-   actionStatus = "Calculadora solicitada"; return true
+   actionStatus = L10n.tr("Calculadora solicitada"); return true
   }
   var events: [CGEvent] = []
   if mapping.action == "shortcut" {
-   guard mapping.keyCode <= 127 else { actionStatus = "Código de tecla no válido"; return false }
+   guard mapping.keyCode <= 127 else { actionStatus = L10n.tr("Código de tecla no válido"); return false }
    for down in [true,false] {
-    guard let event = CGEvent(keyboardEventSource:nil,virtualKey:mapping.keyCode,keyDown:down) else { actionStatus = "No se pudo crear el evento"; return false }
+    guard let event = CGEvent(keyboardEventSource:nil,virtualKey:mapping.keyCode,keyDown:down) else { actionStatus = L10n.tr("No se pudo crear el evento"); return false }
     event.flags = CGEventFlags(rawValue:mapping.modifiers); events.append(event)
    }
   } else {
    let codes = ["volumeUp":0,"volumeDown":1,"mute":7,"playPause":16,"next":17,"previous":18]
-   guard let code = codes[mapping.action] else { actionStatus = "Acción desconocida"; return false }
+   guard let code = codes[mapping.action] else { actionStatus = L10n.tr("Acción desconocida"); return false }
    for down in [true,false] {
-    guard let event = NSEvent.otherEvent(with:.systemDefined,location:.zero,modifierFlags:NSEvent.ModifierFlags(rawValue:down ? 0xa00 : 0xb00),timestamp:0,windowNumber:0,context:nil,subtype:8,data1:(code << 16) | ((down ? 0xa : 0xb) << 8),data2:-1)?.cgEvent else { actionStatus = "No se pudo crear el evento multimedia"; return false }
+    guard let event = NSEvent.otherEvent(with:.systemDefined,location:.zero,modifierFlags:NSEvent.ModifierFlags(rawValue:down ? 0xa00 : 0xb00),timestamp:0,windowNumber:0,context:nil,subtype:8,data1:(code << 16) | ((down ? 0xa : 0xb) << 8),data2:-1)?.cgEvent else { actionStatus = L10n.tr("No se pudo crear el evento multimedia"); return false }
     events.append(event)
    }
   }
   for event in events { event.post(tap:.cghidEventTap) }
-  actionStatus = "Acción enviada: \(mapping.action). Verifica el resultado en macOS."
+  actionStatus = L10n.tr("Acción enviada: {{0}}. Verifica el resultado en macOS.", String(describing: mapping.action))
   return true
  }
 
@@ -947,6 +947,7 @@ private enum ReceiverManagementPrompt: Identifiable {
  var id:String { switch self { case .pair(let endpoint): return "pair:" + endpoint; case .unpair(let target): return "unpair:" + target.key } }
 }
 struct MainView: View {
+ @ObservedObject private var language = LanguageSettings.shared
  @ObservedObject var store: DeviceStore
  @State private var page = "devices"
  @State private var settingsPage = "general"
@@ -976,15 +977,15 @@ struct MainView: View {
  @State private var control = false
  private func chooseApplication() {
   let panel = NSOpenPanel()
-  panel.title = "Elige la aplicación que abrirá este control"
-  panel.prompt = "Elegir aplicación"
+  panel.title = L10n.tr("Elige la aplicación que abrirá este control")
+  panel.prompt = L10n.tr("Elegir aplicación")
   panel.canChooseFiles = true;panel.canChooseDirectories = false
   panel.allowsMultipleSelection = false;panel.treatsFilePackagesAsDirectories = false
   panel.directoryURL = URL(fileURLWithPath:"/Applications",isDirectory:true)
   panel.allowedContentTypes = [.applicationBundle]
   panel.begin { response in
    guard response == .OK,let url = panel.url else { return }
-   guard let values = try? url.resourceValues(forKeys:[.isApplicationKey,.localizedNameKey]),values.isApplication == true,let bundle = Bundle(url:url) else { applicationError = "Selecciona una aplicación de macOS.";return }
+   guard let values = try? url.resourceValues(forKeys:[.isApplicationKey,.localizedNameKey]),values.isApplication == true,let bundle = Bundle(url:url) else { applicationError = L10n.tr("Selecciona una aplicación de macOS.");return }
    application = ApplicationTarget(name:values.localizedName ?? url.deletingPathExtension().lastPathComponent,path:url.path,bundleIdentifier:bundle.bundleIdentifier,bookmark:try? url.bookmarkData(options:[],includingResourceValuesForKeys:nil,relativeTo:nil))
    applicationError = ""
   }
@@ -992,7 +993,7 @@ struct MainView: View {
  @ViewBuilder private func identifiedControls(_ device:DeviceInfo,_ identity:HIDDeviceIdentity) -> some View {
 
        if identity.kind == 1 && store.keyboardRouteIsUnique(identity) {
-        Text("Controles comunes · comprueba que existan en tu teclado").font(.headline)
+        Text(L10n.tr("Controles comunes · comprueba que existan en tu teclado")).font(.headline)
         LazyVGrid(columns:[GridItem(.adaptive(minimum:150))],spacing:10) {
         ForEach([UInt32(233),234,226,205,182,181,402],id: \.self) { usage in
          let source = store.transportID(for:device.id) + ":12:\(usage)"
@@ -1009,10 +1010,10 @@ struct MainView: View {
         }
         }
        } else if identity.kind == 1 {
-        Text("Varios teclados comparten este receptor. La interfaz estándar no permite distinguir sus teclas; no se ofrecen asignaciones individuales por esta ruta.").font(.caption)
+        Text(L10n.tr("Varios teclados comparten este receptor. La interfaz estándar no permite distinguir sus teclas; no se ofrecen asignaciones individuales por esta ruta.")).font(.caption)
        } else if identity.wirelessID == 0x1028 {
         ForEach([UInt8(4),5],id: \.self) { button in
-         Button(button == 4 ? "Atrás" : "Adelante") {
+         Button(button == 4 ? L10n.tr("Atrás") : L10n.tr("Adelante")) {
           let profile = ReceiverMappingProfile(endpoint:identity.endpoint,slot:identity.slot,route:.synthetic1B04)
           store.chooseControl(profile.source(button:button))
           replaceOriginal = false;action = "original"
@@ -1026,54 +1027,54 @@ struct MainView: View {
        }
  }
  @ViewBuilder private var savedMappingRows: some View {
-  if store.mappings.isEmpty { Text("Aún no hay asignaciones. Elige un dispositivo y selecciona su primer control.").foregroundStyle(.secondary) }
+  if store.mappings.isEmpty { Text(L10n.tr("Aún no hay asignaciones. Elige un dispositivo y selecciona su primer control.")).foregroundStyle(.secondary) }
   ForEach(store.mappings) { mapping in mappingRow(mapping) }
  }
  @ViewBuilder private func mappingRow(_ mapping:Mapping) -> some View {
   HStack(spacing:12) {
-   Toggle("Activa",isOn:Binding(get:{store.mappings.first(where:{$0.id == mapping.id})?.isEnabled ?? false},set:{store.toggleMapping(mapping,enabled:$0)})).labelsHidden().accessibilityLabel("Activar " + mapping.controlLabel)
+   Toggle(L10n.tr("Activa"),isOn:Binding(get:{store.mappings.first(where:{$0.id == mapping.id})?.isEnabled ?? false},set:{store.toggleMapping(mapping,enabled:$0)})).labelsHidden().accessibilityLabel(L10n.tr("Activar ") + mapping.controlLabel)
    VStack(alignment:.leading,spacing:4) {
     Text(store.deviceLabel(for:mapping.source) + " · " + mapping.controlLabel).font(.headline)
     Text(mapping.actionLabel).foregroundStyle(.secondary)
     if mapping.source.hasPrefix("keyboard|") {
-     Text(store.isExclusiveMappingActive(mapping) ? "Reemplazo activo · desvío verificado" : "Reemplazo guardado · sin activar").font(.caption).foregroundStyle(.secondary)
+     Text(store.isExclusiveMappingActive(mapping) ? L10n.tr("Reemplazo activo · desvío verificado") : L10n.tr("Reemplazo guardado · sin activar")).font(.caption).foregroundStyle(.secondary)
     }
    }
    Spacer()
    if mapping.source.hasPrefix("keyboard|"),mapping.isEnabled,!store.isExclusiveMappingActive(mapping) {
-    Button("Aplicar") { store.toggleMapping(mapping,enabled:true) }.disabled(store.isRestoring)
+    Button(L10n.tr("Aplicar")) { store.toggleMapping(mapping,enabled:true) }.disabled(store.isRestoring)
    }
-   Button("Editar") {
+   Button(L10n.tr("Editar")) {
     guard store.editMapping(mapping) else { return };page = "devices";replaceOriginal = mapping.source.hasPrefix("keyboard|")
     audioOutputUID = mapping.audioOutputUID ?? "";application = mapping.application;action = mapping.action;keyCode = String(mapping.keyCode);advancedKey = true
     command = mapping.modifiers & 1048576 != 0;shift = mapping.modifiers & 131072 != 0
     option = mapping.modifiers & 524288 != 0;control = mapping.modifiers & 262144 != 0
    }
-   Button("Eliminar") { store.remove(mapping) }.disabled(store.isRestoring)
+   Button(L10n.tr("Eliminar")) { store.remove(mapping) }.disabled(store.isRestoring)
   }.padding(12).background(.quaternary.opacity(0.2),in:RoundedRectangle(cornerRadius:12))
  }
  @ViewBuilder private var receiverManagementPanel: some View {
-  GroupBox("Receptores y emparejamiento") {
+  GroupBox(L10n.tr("Receptores y emparejamiento")) {
    VStack(alignment:.leading,spacing:12) {
-    Text("Añade dispositivos compatibles con Unifying al receptor elegido. Quitar un dispositivo borra su vínculo: dejará de controlar este Mac hasta volver a emparejarlo. Cierra otras aplicaciones de emparejamiento durante esta operación.").font(.caption)
-    Button("Preparar receptores / actualizar dispositivos") { store.prepareReceiverManagement() }
+    Text(L10n.tr("Añade dispositivos compatibles con Unifying al receptor elegido. Quitar un dispositivo borra su vínculo: dejará de controlar este Mac hasta volver a emparejarlo. Cierra otras aplicaciones de emparejamiento durante esta operación.")).font(.caption)
+    Button(L10n.tr("Preparar receptores / actualizar dispositivos")) { store.prepareReceiverManagement() }
     ForEach(store.receiverEndpoints,id:\.self) { endpoint in
      VStack(alignment:.leading,spacing:8) {
       Text(store.receiverName(endpoint)).font(.headline)
-      DisclosureGroup("Identificación del receptor") { Text(endpoint).font(.caption.monospaced()).textSelection(.enabled) }
+      DisclosureGroup(L10n.tr("Identificación del receptor")) { Text(endpoint).font(.caption.monospaced()).textSelection(.enabled) }
       HStack {
-       Button("Añadir / emparejar dispositivo…") { managementPrompt = .pair(endpoint) }.disabled(!store.canManageReceiver(endpoint) || store.pairingDeadlines[endpoint] != nil)
-       Button("Cerrar emparejamiento") { store.manageReceiver(endpoint,command:.closePairing) }.disabled(!store.canManageReceiver(endpoint))
+       Button(L10n.tr("Añadir / emparejar dispositivo…")) { managementPrompt = .pair(endpoint) }.disabled(!store.canManageReceiver(endpoint) || store.pairingDeadlines[endpoint] != nil)
+       Button(L10n.tr("Cerrar emparejamiento")) { store.manageReceiver(endpoint,command:.closePairing) }.disabled(!store.canManageReceiver(endpoint))
       }
-      if let deadline = store.pairingDeadlines[endpoint] { Text("Plazo de emparejamiento hasta \(deadline.formatted(date:.omitted,time:.shortened)). Apaga y enciende sólo el dispositivo que quieres añadir.").font(.caption) }
+      if let deadline = store.pairingDeadlines[endpoint] { Text(L10n.tr("Plazo de emparejamiento hasta {{0}}. Apaga y enciende sólo el dispositivo que quieres añadir.", String(describing: deadline.formatted(date:.omitted,time:.shortened)))).font(.caption) }
       ForEach(store.pairedDevices(endpoint),id:\.key) { target in
        HStack {
-        Text("\(target.displayName) · posición \(target.slot) · HID++ \(String(format:"%04X",target.wirelessID))")
+        Text(L10n.tr("{{0}} · posición {{1}} · HID++ {{2}}", String(describing: target.displayName), String(describing: target.slot), String(describing: String(format:"%04X",target.wirelessID))))
         Spacer()
         Button("Quitar…") { managementPrompt = .unpair(target) }.disabled(!store.canManageReceiver(endpoint) || store.pairingDeadlines[endpoint] != nil)
        }
       }
-      Text(store.managementStatus[endpoint] ?? "Consulta los dispositivos antes de iniciar una operación. Sólo receptores Unifying compatibles; no Bluetooth ni Bolt.").font(.caption).textSelection(.enabled)
+      Text(store.managementStatus[endpoint] ?? L10n.tr("Consulta los dispositivos antes de iniciar una operación. Sólo receptores Unifying compatibles; no Bluetooth ni Bolt.")).font(.caption).textSelection(.enabled)
      }.padding(.vertical,8)
      Divider()
     }
@@ -1081,25 +1082,25 @@ struct MainView: View {
   }
  }
  @ViewBuilder private var keyboardDiscoveryPanel: some View {
-  GroupBox("Sustitución de teclas multimedia · compatibilidad") {
+  GroupBox(L10n.tr("Sustitución de teclas multimedia · compatibilidad")) {
    VStack(alignment:.leading,spacing:10) {
-    Text("Esta consulta sólo lee capacidades. Los reemplazos se activan desde Dispositivos para controles compatibles; Korda verifica el desvío y restaura el estado previo al pausar o salir.").font(.caption)
+    Text(L10n.tr("Esta consulta sólo lee capacidades. Los reemplazos se activan desde Dispositivos para controles compatibles; Korda verifica el desvío y restaura el estado previo al pausar o salir.")).font(.caption)
     ForEach(store.verifiedIdentities.values.filter{$0.kind == 1}.sorted{$0.key < $1.key},id:\.key) { target in
      VStack(alignment:.leading,spacing:6) {
       HStack {
        Text(target.displayName).font(.headline)
-       Button("Consultar capacidad de sustitución") { store.discoverKeyboard(target) }.disabled(!store.canManageReceiver(target.endpoint) || store.pairingDeadlines[target.endpoint] != nil)
+       Button(L10n.tr("Consultar capacidad de sustitución")) { store.discoverKeyboard(target) }.disabled(!store.canManageReceiver(target.endpoint) || store.pairingDeadlines[target.endpoint] != nil)
       }
-      Text(store.keyboardDiscoveryStatus[target.key] ?? "Pendiente de consultar con el teclado encendido.").font(.caption).textSelection(.enabled)
+      Text(store.keyboardDiscoveryStatus[target.key] ?? L10n.tr("Pendiente de consultar con el teclado encendido.")).font(.caption).textSelection(.enabled)
       if let trace = store.keyboardDiscoveryTrace[target.key], !trace.isEmpty {
-       DisclosureGroup("Detalle de la consulta") {
+       DisclosureGroup(L10n.tr("Detalle de la consulta")) {
         ForEach(Array(trace.enumerated()),id:\.offset) { entry in Text(entry.element).font(.caption.monospaced()).textSelection(.enabled) }
        }
       }
       if let controls = store.keyboardControls[target.key], !controls.isEmpty {
-       DisclosureGroup("Controles declarados por el teclado") {
+       DisclosureGroup(L10n.tr("Controles declarados por el teclado")) {
         ForEach(Array(controls.enumerated()),id:\.offset) { entry in
-         Text(String(format:"CID %04X · tarea %04X · flags %04X · %@",entry.element.cid,entry.element.task,entry.element.flags,entry.element.isDivertable ? "declara desvío" : "sin desvío declarado")).font(.caption.monospaced()).textSelection(.enabled)
+         Text(String(format:L10n.tr("CID %04X · tarea %04X · flags %04X · %@"),entry.element.cid,entry.element.task,entry.element.flags,entry.element.isDivertable ? L10n.tr("declara desvío") : L10n.tr("sin desvío declarado"))).font(.caption.monospaced()).textSelection(.enabled)
         }
        }
       }
@@ -1112,31 +1113,31 @@ struct MainView: View {
   switch usage { case 233:return "speaker.wave.3";case 234:return "speaker.wave.1";case 226:return "speaker.slash";case 205:return "playpause";case 181:return "forward.end";case 182:return "backward.end";default:return "calculator" }
  }
  private var visibleDevices:[DeviceInfo] { store.sidebarDevices.filter { device in
-  (search.isEmpty || device.name.localizedCaseInsensitiveContains(search)) && (showInfrastructure || (!device.detail.contains("Hub") && !device.name.contains("Host Controller")))
+  (search.isEmpty || device.name.localizedCaseInsensitiveContains(search)) && (showInfrastructure || (!device.detail.localizedCaseInsensitiveContains(L10n.tr("Hub")) && !device.name.localizedCaseInsensitiveContains("Host Controller")))
  } }
  private func deviceIcon(_ device:DeviceInfo)->String {
   if device.id.hasPrefix("audio|") { return "speaker.wave.2" }
-  if device.detail.contains("Teclado") { return "keyboard" }
-  if device.detail.contains("Ratón") || device.name.contains("M570") { return "computermouse" }
-  if device.detail.contains("vídeo") || device.detail.contains("Cámara") { return "web.camera" }
-  if device.detail.contains("Almacenamiento") { return "externaldrive" }
+  if device.detail.localizedCaseInsensitiveContains(L10n.tr("Teclado")) { return "keyboard" }
+  if device.detail.localizedCaseInsensitiveContains(L10n.tr("Ratón")) || device.name.contains("M570") { return "computermouse" }
+  if device.detail.localizedCaseInsensitiveContains(L10n.tr("vídeo")) || device.detail.localizedCaseInsensitiveContains(L10n.tr("Cámara")) { return "web.camera" }
+  if device.detail.localizedCaseInsensitiveContains(L10n.tr("Almacenamiento")) { return "externaldrive" }
   return "cable.connector"
  }
  @ViewBuilder private var deviceContent:some View {
-     Text("1. Elige un dispositivo · 2. Selecciona un control · 3. Guarda su acción").foregroundStyle(.secondary)
+     Text(L10n.tr("1. Elige un dispositivo · 2. Selecciona un control · 3. Guarda su acción")).foregroundStyle(.secondary)
      if let device = store.sidebarDevices.first(where: { $0.id == store.selected }) {
       Text(device.name).font(.title2)
       Text(device.detail).textSelection(.enabled)
       if let usb = device.usb {
-       DisclosureGroup("Información del dispositivo") {
+       DisclosureGroup(L10n.tr("Información del dispositivo")) {
         VStack(alignment:.leading,spacing:6) {
-         Text("Nombre informado: \(usb.name)").font(.caption).textSelection(.enabled)
+         Text(L10n.tr("Nombre informado: {{0}}", String(describing: usb.name))).font(.caption).textSelection(.enabled)
          ForEach(usb.details,id:\.self) { Text($0).font(.caption).textSelection(.enabled) }
-         if device.device != nil { Text("Controles HID: puedes aprender botones adicionales, teclas multimedia y F1–F24. El reemplazo exclusivo de la función original sigue pendiente.").font(.caption) }
-         else { Text("Este dispositivo está incluido en el inventario. Korda todavía no ofrece ajustes directos para esta clase; eso no significa que el hardware carezca de ellos.").font(.caption) }
-         if usb.vendorID == 1133 && usb.productID == 50475 { Text("Las entradas estándar del receptor no identifican por sí solas al periférico que las envía. Administra cada dispositivo identificado en su propia entrada.").font(.caption) }
+         if device.device != nil { Text(L10n.tr("Controles HID: puedes aprender botones adicionales, teclas multimedia y F1–F24. El reemplazo exclusivo de la función original sigue pendiente.")).font(.caption) }
+         else { Text(L10n.tr("Este dispositivo está incluido en el inventario. Korda todavía no ofrece ajustes directos para esta clase; eso no significa que el hardware carezca de ellos.")).font(.caption) }
+         if usb.vendorID == 1133 && usb.productID == 50475 { Text(L10n.tr("Las entradas estándar del receptor no identifican por sí solas al periférico que las envía. Administra cada dispositivo identificado en su propia entrada.")).font(.caption) }
          if usb.usbClass == 1 || usb.interfaceClasses.contains(1) {
-          Button("Abrir ajustes de sonido de macOS") { if let url = URL(string:"x-apple.systempreferences:com.apple.preference.sound") { NSWorkspace.shared.open(url) } }
+          Button(L10n.tr("Abrir ajustes de sonido de macOS")) { if let url = URL(string:"x-apple.systempreferences:com.apple.preference.sound") { NSWorkspace.shared.open(url) } }
          }
         }.frame(maxWidth:.infinity,alignment:.leading)
        }
@@ -1144,64 +1145,70 @@ struct MainView: View {
       if device.id.hasPrefix("audio|") { DigitalAudioPanel(controller:store.audio,outputUID:String(device.id.dropFirst(6))) }
       if let identity = store.verifiedIdentities[device.id] { identifiedControls(device,identity) }
       if device.device != nil {
-       Button("Detectar otro control") { if !store.capturing { store.resumeBackground() }; store.learning = true }
-       if store.learning { Text("Pulsa una vez el control que quieres configurar.").font(.callout).foregroundStyle(.secondary) }
+       Button(L10n.tr("Detectar otro control")) { if !store.capturing { store.resumeBackground() }; store.learning = true }
+       if store.learning { Text(L10n.tr("Pulsa una vez el control que quieres configurar.")).font(.callout).foregroundStyle(.secondary) }
        if !store.lastSource.isEmpty { Label(store.lastEvent,systemImage:"cursorarrow.click").font(.headline) }
-       Text(store.actionStatus).font(.callout).textSelection(.enabled)
-       Picker("Acción", selection: $action) {
-        Text("Función original (sin asignación de Korda)").tag("original")
-        Text("Subir volumen").tag("volumeUp"); Text("Bajar volumen").tag("volumeDown"); Text("Silenciar").tag("mute"); Text("Reproducir / pausa").tag("playPause"); Text("Pista siguiente").tag("next"); Text("Pista anterior").tag("previous"); Text("Abrir aplicación…").tag("launchApplication"); Text("Abrir Calculadora").tag("launchCalculator"); Text("Atajo de teclado").tag("shortcut"); Text("Subir volumen · Korda (salida digital)").tag("digitalVolumeUp"); Text("Bajar volumen · Korda (salida digital)").tag("digitalVolumeDown"); Text("Silenciar · Korda (salida digital)").tag("digitalMute")
+       Text(L10n.display(store.actionStatus)).font(.callout).textSelection(.enabled)
+       Picker(L10n.tr("Acción"), selection: $action) {
+        Text(L10n.tr("Función original (sin asignación de Korda)")).tag("original")
+        Text(L10n.tr("Subir volumen")).tag("volumeUp"); Text(L10n.tr("Bajar volumen")).tag("volumeDown"); Text(L10n.tr("Silenciar")).tag("mute"); Text(L10n.tr("Reproducir / pausa")).tag("playPause"); Text(L10n.tr("Pista siguiente")).tag("next"); Text(L10n.tr("Pista anterior")).tag("previous"); Text(L10n.tr("Abrir aplicación…")).tag("launchApplication"); Text(L10n.tr("Abrir Calculadora")).tag("launchCalculator"); Text(L10n.tr("Atajo de teclado")).tag("shortcut"); Text(L10n.tr("Subir volumen · Korda (salida digital)")).tag("digitalVolumeUp"); Text(L10n.tr("Bajar volumen · Korda (salida digital)")).tag("digitalVolumeDown"); Text(L10n.tr("Silenciar · Korda (salida digital)")).tag("digitalMute")
        }
        if action != "original" {
-        Toggle("Reemplazar la función original (en pruebas)",isOn:$replaceOriginal).disabled(!store.canReplaceSelectedControl)
-        Text(replaceOriginal ? "Se restaurará el estado anterior al pausar o salir. La activación requiere verificar el desvío." : "Acción adicional: la función original también se ejecutará.").font(.caption).foregroundStyle(.secondary)
-        if replaceOriginal { Text("La recuperación tras forzar el cierre o una caída todavía está pendiente. Durante la prueba usa Pausar o Salir de Korda.").font(.caption).foregroundStyle(.secondary) }
-        if !store.canReplaceSelectedControl { Text("El reemplazo necesita un control compatible y una consulta reciente del teclado.").font(.caption).foregroundStyle(.secondary) }
+        Toggle(L10n.tr("Reemplazar la función original (en pruebas)"),isOn:$replaceOriginal).disabled(!store.canReplaceSelectedControl)
+        Text(replaceOriginal ? L10n.tr("Se restaurará el estado anterior al pausar o salir. La activación requiere verificar el desvío.") : L10n.tr("Acción adicional: la función original también se ejecutará.")).font(.caption).foregroundStyle(.secondary)
+        if replaceOriginal { Text(L10n.tr("La recuperación tras forzar el cierre o una caída todavía está pendiente. Durante la prueba usa Pausar o Salir de Korda.")).font(.caption).foregroundStyle(.secondary) }
+        if !store.canReplaceSelectedControl { Text(L10n.tr("El reemplazo necesita un control compatible y una consulta reciente del teclado.")).font(.caption).foregroundStyle(.secondary) }
        }
        if isDigitalAction {
-        Picker("Salida de audio",selection:$audioOutputUID) {
-         Text("Selecciona una salida").tag("")
+        Picker(L10n.tr("Salida de audio"),selection:$audioOutputUID) {
+         Text(L10n.tr("Selecciona una salida")).tag("")
          ForEach(store.audio.outputs) { output in Text(output.name).tag(output.id) }
-         if !audioOutputUID.isEmpty && !store.audio.outputs.contains(where:{$0.id == audioOutputUID}) { Text("Salida desconectada").tag(audioOutputUID) }
+         if !audioOutputUID.isEmpty && !store.audio.outputs.contains(where:{$0.id == audioOutputUID}) { Text(L10n.tr("Salida desconectada")).tag(audioOutputUID) }
         }
-        Text("Activa el control de esa salida en Dispositivos o Ajustes → Sonido. Esta acción ajusta el audio con Korda; no envía la tecla de volumen de macOS.").font(.caption).foregroundStyle(.secondary)
+        Text(L10n.tr("Activa el control de esa salida en Dispositivos o Ajustes → Sonido. Esta acción ajusta el audio con Korda; no envía la tecla de volumen de macOS.")).font(.caption).foregroundStyle(.secondary)
        }
        if action == "launchApplication" {
         HStack {
          Image(systemName:"app")
-         Text(application?.name ?? "Ninguna aplicación seleccionada").lineLimit(1)
+         Text(application?.name ?? L10n.tr("Ninguna aplicación seleccionada")).lineLimit(1)
          Spacer()
-         Button(application == nil ? "Elegir aplicación…" : "Cambiar…") { chooseApplication() }
+         Button(application == nil ? L10n.tr("Elegir aplicación…") : L10n.tr("Cambiar…")) { chooseApplication() }
         }
         if !applicationError.isEmpty { Text(applicationError).font(.caption).foregroundStyle(.red) }
-        Text("Abre la aplicación elegida o la trae al frente si ya está abierta.").font(.caption).foregroundStyle(.secondary)
+        Text(L10n.tr("Abre la aplicación elegida o la trae al frente si ya está abierta.")).font(.caption).foregroundStyle(.secondary)
        }
        if action == "shortcut" {
-        Picker("Tecla",selection:$namedKey) { ForEach(NamedShortcutKey.all) { key in Text(key.label).tag(key.id) } }.disabled(advancedKey)
-        DisclosureGroup("Atajo avanzado") {
-         Toggle("Usar código virtual",isOn:$advancedKey)
-         if advancedKey { TextField("Código virtual macOS (0–127)",text:$keyCode) }
+        Picker(L10n.tr("Tecla"),selection:$namedKey) { ForEach(NamedShortcutKey.all) { key in Text(key.label).tag(key.id) } }.disabled(advancedKey)
+        DisclosureGroup(L10n.tr("Atajo avanzado")) {
+         Toggle(L10n.tr("Usar código virtual"),isOn:$advancedKey)
+         if advancedKey { TextField(L10n.tr("Código virtual macOS (0–127)"),text:$keyCode) }
         }
         HStack { Toggle("⌘", isOn: $command); Toggle("⇧", isOn: $shift); Toggle("⌥", isOn: $option); Toggle("⌃", isOn: $control) }
        }
-       Button("Guardar asignación") {
+       Button(L10n.tr("Guardar asignación")) {
         if replaceOriginal { store.saveExclusive(action:action,keyCode:chosenKeyCode ?? 0,modifiers:chosenModifiers,application:application,audioOutputUID:audioOutputUID.isEmpty ? nil : audioOutputUID) }
         else { store.save(action:action,keyCode:chosenKeyCode ?? 0,modifiers:chosenModifiers,application:application,audioOutputUID:audioOutputUID.isEmpty ? nil : audioOutputUID) }
        }.disabled((isDigitalAction && audioOutputUID.isEmpty) || (action == "launchApplication" && application == nil) || store.isRestoring || store.lastSource.isEmpty || (action != "original" && replaceOriginal && !store.canReplaceSelectedControl) || (action == "shortcut" && (chosenKeyCode.map { $0 > 127 } ?? true)))
-       Button("Probar acción seleccionada") {
+       Button(L10n.tr("Probar acción seleccionada")) {
         store.testAction(action:action,keyCode:chosenKeyCode ?? 0,modifiers:chosenModifiers,application:application,audioOutputUID:audioOutputUID.isEmpty ? nil : audioOutputUID)
        }.disabled((isDigitalAction && (audioOutputUID.isEmpty || store.audio.activeOutputUID != audioOutputUID)) || (action == "launchApplication" && application == nil) || action == "original" || (!isDigitalAction && action != "launchApplication" && !AXIsProcessTrusted()) || (action == "shortcut" && (chosenKeyCode.map { $0 > 127 } ?? true)))
       }
 
-     } else { Text("Selecciona un dispositivo para inspeccionar sus controles.") }
+     } else { Text(L10n.tr("Selecciona un dispositivo para inspeccionar sus controles.")) }
  }
  @ViewBuilder private var settingsContent:some View {
-  Picker("Ajustes",selection:$settingsPage) { Text("General").tag("general"); Text("Permisos").tag("permissions"); Text("Sonido").tag("audio"); Text("Diagnósticos").tag("diagnostics") }.pickerStyle(.segmented)
+  Picker(L10n.tr("Ajustes"),selection:$settingsPage) { Text(L10n.tr("General")).tag("general"); Text(L10n.tr("Permisos")).tag("permissions"); Text(L10n.tr("Sonido")).tag("audio"); Text(L10n.tr("Diagnósticos")).tag("diagnostics") }.pickerStyle(.segmented)
   if settingsPage == "audio" { DigitalAudioPanel(controller:store.audio) }
   if settingsPage == "general" {
-   GroupBox("Funcionamiento") { VStack(alignment:.leading,spacing:12) {
-    Text("Cerrar la ventana mantiene Korda en la barra de menús. Pausar restaura las teclas reemplazadas antes de detener las asignaciones.")
-    Toggle("Iniciar con macOS",isOn:Binding(get:{loginEnabled},set:{ enabled in
+   Picker(L10n.tr("Idioma"),selection:$language.preference) {
+    Text(L10n.tr("Idioma del sistema")).tag("system")
+    Text("Español").tag("es")
+    Text("English").tag("en")
+   }
+
+   GroupBox(L10n.tr("Funcionamiento")) { VStack(alignment:.leading,spacing:12) {
+    Text(L10n.tr("Cerrar la ventana mantiene Korda en la barra de menús. Pausar restaura las teclas reemplazadas antes de detener las asignaciones."))
+    Toggle(L10n.tr("Iniciar con macOS"),isOn:Binding(get:{loginEnabled},set:{ enabled in
      do { if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }; loginEnabled = SMAppService.mainApp.status == .enabled }
      catch { loginError = error.localizedDescription }
     }))
@@ -1210,95 +1217,95 @@ struct MainView: View {
    receiverManagementPanel
   }
   if settingsPage == "permissions" {
-     GroupBox("Permisos de Korda") {
+     GroupBox(L10n.tr("Permisos de Korda")) {
       VStack(alignment:.leading,spacing:8) {
-       Text("Monitorización de entrada permite recibir botones. Accesibilidad permite ejecutar tus acciones. Korda no registra el texto que escribes.").font(.caption)
+       Text(L10n.tr("Monitorización de entrada permite recibir botones. Accesibilidad permite ejecutar tus acciones. Korda no registra el texto que escribes.")).font(.caption)
        HStack {
-        Button("Solicitar monitorización") { _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent); store.refresh() }
-        Button("Solicitar Accesibilidad") {
+        Button(L10n.tr("Solicitar monitorización")) { _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent); store.refresh() }
+        Button(L10n.tr("Solicitar Accesibilidad")) {
          _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String:true] as CFDictionary)
          store.refresh()
         }
-        Button("Actualizar estado") { store.refresh() }
+        Button(L10n.tr("Actualizar estado")) { store.refresh() }
        }
        HStack {
-        Button("Abrir Monitorización de entrada") { if let url = URL(string:"x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") { NSWorkspace.shared.open(url) } }
-        Button("Abrir Accesibilidad") { if let url = URL(string:"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) } }
+        Button(L10n.tr("Abrir Monitorización de entrada")) { if let url = URL(string:"x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") { NSWorkspace.shared.open(url) } }
+        Button(L10n.tr("Abrir Accesibilidad")) { if let url = URL(string:"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) } }
        }
       }.frame(maxWidth:.infinity,alignment:.leading)
      }
  }
   if settingsPage == "diagnostics" {
        HStack {
-        Button(store.capturing ? "Detener captura y asignaciones" : "Iniciar captura de botones") { store.capturing ? store.stop() : store.start() }
-        Toggle("Ejecutar asignaciones", isOn: $store.enabled).disabled(!store.capturing || store.hasExclusiveObligations)
-        if store.hasExclusiveObligations { Text("Usa Pausar para restaurar las teclas antes de detener los reemplazos.").font(.caption) }
+        Button(store.capturing ? L10n.tr("Detener captura y asignaciones") : L10n.tr("Iniciar captura de botones")) { store.capturing ? store.stop() : store.start() }
+        Toggle(L10n.tr("Ejecutar asignaciones"), isOn: $store.enabled).disabled(!store.capturing || store.hasExclusiveObligations)
+        if store.hasExclusiveObligations { Text(L10n.tr("Usa Pausar para restaurar las teclas antes de detener los reemplazos.")).font(.caption) }
        }
-       Toggle("Aprender pulsaciones (desactivar para fijar el botón)", isOn: $store.learning).disabled(!store.capturing)
-       Text(store.learning ? "Aprendizaje activo: pulsa el control que quieres asignar y desactiva el aprendizaje para conservarlo." : "Botón fijado: las nuevas pulsaciones no cambian la selección. La ejecución de asignaciones es independiente.").font(.caption)
-       Text("Sólo se observan botones adicionales (3+), controles multimedia y F1–F24; no se registra texto. Las acciones originales no se bloquean: una asignación puede sumarse a la función existente.").font(.caption).foregroundStyle(.secondary)
+       Toggle(L10n.tr("Aprender pulsaciones (desactivar para fijar el botón)"), isOn: $store.learning).disabled(!store.capturing)
+       Text(store.learning ? L10n.tr("Aprendizaje activo: pulsa el control que quieres asignar y desactiva el aprendizaje para conservarlo.") : L10n.tr("Botón fijado: las nuevas pulsaciones no cambian la selección. La ejecución de asignaciones es independiente.")).font(.caption)
+       Text(L10n.tr("Sólo se observan botones adicionales (3+), controles multimedia y F1–F24; no se registra texto. Las acciones originales no se bloquean: una asignación puede sumarse a la función existente.")).font(.caption).foregroundStyle(.secondary)
        Text(store.lastEvent).font(.headline)
-       DisclosureGroup("Últimas pulsaciones (máximo 10)") {
+       DisclosureGroup(L10n.tr("Últimas pulsaciones (máximo 10)")) {
         ForEach(Array(store.recentEvents.enumerated()), id: \.offset) { entry in
          Text(entry.element).font(.caption.monospaced()).textSelection(.enabled)
         }
        }
 
-   Text("Herramientas de soporte. No necesitas usarlas para administrar tus asignaciones.").foregroundStyle(.secondary)
-   Text(store.status).font(.caption)
+   Text(L10n.tr("Herramientas de soporte. No necesitas usarlas para administrar tus asignaciones.")).foregroundStyle(.secondary)
+   Text(L10n.display(store.status)).font(.caption)
    keyboardDiscoveryPanel
      Divider()
-     DisclosureGroup("Diagnóstico M570 · botones adicionales") {
-      Toggle("Observar informe de ratón conocido (sólo diagnóstico)", isOn: $store.rawDiagnosticsEnabled).disabled(!store.capturing)
-      Text("Detenido por defecto. Sólo interfaces Logitech de ratón con descriptor verificado, informe 2, botones 3–16. Ignora texto, movimiento y rueda; no guarda bytes ni crea asignaciones.").font(.caption)
-      Text("Interfaces: \(store.rawInterfaceCount) · informes2: \(store.rawReportCount) · rechazados: \(store.rawRejectedCount) · transiciones extra: \(store.rawButtonCount) · pulsaciones HID estándar: \(store.standardButtonCount)").font(.caption.monospaced())
+     DisclosureGroup(L10n.tr("Diagnóstico M570 · botones adicionales")) {
+      Toggle(L10n.tr("Observar informe de ratón conocido (sólo diagnóstico)"), isOn: $store.rawDiagnosticsEnabled).disabled(!store.capturing)
+      Text(L10n.tr("Detenido por defecto. Sólo interfaces Logitech de ratón con descriptor verificado, informe 2, botones 3–16. Ignora texto, movimiento y rueda; no guarda bytes ni crea asignaciones.")).font(.caption)
+      Text(L10n.tr("Interfaces: {{0}} · informes2: {{1}} · rechazados: {{2}} · transiciones extra: {{3}} · pulsaciones HID estándar: {{4}}", String(describing: store.rawInterfaceCount), String(describing: store.rawReportCount), String(describing: store.rawRejectedCount), String(describing: store.rawButtonCount), String(describing: store.standardButtonCount))).font(.caption.monospaced())
       ForEach(Array(store.rawEvents.enumerated()), id: \.offset) { entry in Text(entry.element).font(.caption.monospaced()).textSelection(.enabled) }
      }
      Divider()
-     GroupBox("Identificación de dispositivos · HID++") {
+     GroupBox(L10n.tr("Identificación de dispositivos · HID++")) {
       VStack(alignment:.leading,spacing:8) {
-       Text("Consulta de lectura del receptor: identificador inalámbrico, tipo y nombre registrado. No cambia emparejamientos ni botones.").font(.caption)
-       Button("Identificar dispositivos HID++") { store.identifyDevices() }
+       Text(L10n.tr("Consulta de lectura del receptor: identificador inalámbrico, tipo y nombre registrado. No cambia emparejamientos ni botones.")).font(.caption)
+       Button(L10n.tr("Identificar dispositivos HID++")) { store.identifyDevices() }
        Text(store.identificationStatus).font(.caption)
        ForEach(store.identificationErrors,id: \.self) { Text($0).font(.caption).foregroundStyle(.red) }
        ForEach(store.verifiedIdentities.keys.sorted(),id: \.self) { key in
         if let identity = store.verifiedIdentities[key] {
          Text(identity.label).font(.headline)
-         Text(identity.endpoint + " · tipo \(identity.kind)").font(.caption.monospaced()).textSelection(.enabled)
+         Text(identity.endpoint + L10n.tr(" · tipo {{0}}", String(describing: identity.kind))).font(.caption.monospaced()).textSelection(.enabled)
         }
        }
       }.frame(maxWidth:.infinity,alignment:.leading)
      }
-     DisclosureGroup("Diagnóstico pasivo del receptor · DJ / HID++") {
-      Toggle("Observar colección de fabricante verificada", isOn: $store.receiverDiagnosticsEnabled).disabled(!store.capturing)
-      Text("Escucha sin apertura exclusiva; identificación mediante consultas de lectura explícitas. Sólo cuenta ID/longitud de informes desconocidos; interpreta ratón DJ20 y candidatos 1B04 estrictos, por interfaz y slot. No registra teclado, coordenadas ni bytes crudos. Sólo las rutas autorizadas abajo permiten aprender y ejecutar asignaciones.").font(.caption)
-      Text("Interfaces admitidas: \(store.receiverInterfaceCount) · ignorados: \(store.receiverIgnoredCount)").font(.caption.monospaced())
+     DisclosureGroup(L10n.tr("Diagnóstico pasivo del receptor · DJ / HID++")) {
+      Toggle(L10n.tr("Observar colección de fabricante verificada"), isOn: $store.receiverDiagnosticsEnabled).disabled(!store.capturing)
+      Text(L10n.tr("Escucha sin apertura exclusiva; identificación mediante consultas de lectura explícitas. Sólo cuenta ID/longitud de informes desconocidos; interpreta ratón DJ20 y candidatos 1B04 estrictos, por interfaz y slot. No registra teclado, coordenadas ni bytes crudos. Sólo las rutas autorizadas abajo permiten aprender y ejecutar asignaciones.")).font(.caption)
+      Text(L10n.tr("Interfaces admitidas: {{0}} · ignorados: {{1}}", String(describing: store.receiverInterfaceCount), String(describing: store.receiverIgnoredCount))).font(.caption.monospaced())
       ForEach(store.receiverProfiles) { profile in
        VStack(alignment:.leading) {
         Text("\(profile.endpoint) · slot \(profile.slot) · \(profile.route.label)").font(.caption.monospaced())
-        Text("Perfil ligado al receptor y slot, no a una identidad permanente. Un nuevo emparejamiento puede reutilizar este slot.").font(.caption)
+        Text(L10n.tr("Perfil ligado al receptor y slot, no a una identidad permanente. Un nuevo emparejamiento puede reutilizar este slot.")).font(.caption)
         if profile.route == .synthetic1B04 {
-         Toggle("Según mi prueba: botón 4 Atrás y botón 5 Adelante",isOn:Binding(get:{store.receiverProfiles.first(where:{$0.id == profile.id})?.buttonLabelsConfirmed ?? false},set:{store.confirmReceiverButtonLabels(profile,confirmed:$0)})).disabled(!profile.enrolled)
+         Toggle(L10n.tr("Según mi prueba: botón 4 Atrás y botón 5 Adelante"),isOn:Binding(get:{store.receiverProfiles.first(where:{$0.id == profile.id})?.buttonLabelsConfirmed ?? false},set:{store.confirmReceiverButtonLabels(profile,confirmed:$0)})).disabled(!profile.enrolled)
         }
-        Toggle("Usar esta ruta para asignaciones",isOn:Binding(get:{store.receiverProfiles.first(where:{$0.id == profile.id})?.enrolled ?? false},set:{store.enrollReceiverProfile(profile,enabled:$0)}))
+        Toggle(L10n.tr("Usar esta ruta para asignaciones"),isOn:Binding(get:{store.receiverProfiles.first(where:{$0.id == profile.id})?.enrolled ?? false},set:{store.enrollReceiverProfile(profile,enabled:$0)}))
        }
       }
       ForEach(store.receiverOpenResults,id: \.self) { Text($0).font(.caption.monospaced()) }
       ForEach(store.receiverReportCounts.keys.sorted(),id: \.self) { key in Text("\(key): \(store.receiverReportCounts[key] ?? 0)").font(.caption.monospaced()) }
       ForEach(store.receiverAcceptedCounts.keys.sorted(),id: \.self) { key in Text("\(key): \(store.receiverAcceptedCounts[key] ?? 0)").font(.caption.monospaced()) }
-      ForEach(store.observedM570Slots,id: \.self) { Text("M570 identificado por notificación: " + $0).font(.caption) }
+      ForEach(store.observedM570Slots,id: \.self) { Text(L10n.tr("M570 identificado por notificación: ") + $0).font(.caption) }
       ForEach(Array(store.receiverEvents.enumerated()),id: \.offset) { entry in Text(entry.element).font(.caption.monospaced()).textSelection(.enabled) }
      }
  }
  }
  var body: some View {
   NavigationSplitView {
-   TextField("Buscar dispositivo",text:$search).textFieldStyle(.roundedBorder).padding([.horizontal,.top])
-   Toggle("Mostrar hubs e internos",isOn:$showInfrastructure).font(.caption).padding(.horizontal)
+   TextField(L10n.tr("Buscar dispositivo"),text:$search).textFieldStyle(.roundedBorder).padding([.horizontal,.top])
+   Toggle(L10n.tr("Mostrar hubs e internos"),isOn:$showInfrastructure).font(.caption).padding(.horizontal)
    List(visibleDevices, selection: $store.selected) { device in
     HStack { Image(systemName:deviceIcon(device)).frame(width:26).foregroundStyle(.mint); VStack(alignment: .leading) { Text(device.name).font(.headline); Text(device.detail).font(.caption).foregroundStyle(.secondary) } }.padding(.vertical, 7).tag(device.id)
-   }.navigationTitle("Dispositivos")
-   Button("Actualizar inventario") { store.refresh() }.padding()
+   }.navigationTitle(L10n.tr("Dispositivos"))
+   Button(L10n.tr("Actualizar inventario")) { store.refresh() }.padding()
   } detail: {
    ScrollView {
     VStack(alignment: .leading, spacing: 16) {
@@ -1306,44 +1313,45 @@ struct MainView: View {
       Image(systemName:"keyboard").font(.largeTitle).foregroundStyle(.mint)
       Text("Korda").font(.largeTitle.bold())
       Spacer()
-      Button(store.isRestoring ? "Restaurando…" : (store.hasBackgroundActivity ? "Pausar" : "Activar Korda")) { if store.hasBackgroundActivity { store.pauseBackground() } else { store.resumeBackground() } }.disabled(store.isRestoring)
+      Button(store.isRestoring ? L10n.tr("Restaurando…") : (store.hasBackgroundActivity ? L10n.tr("Pausar") : L10n.tr("Activar Korda"))) { if store.hasBackgroundActivity { store.pauseBackground() } else { store.resumeBackground() } }.disabled(store.isRestoring)
      }
-     Picker("Sección",selection:$page) {
-      Text("Dispositivos").tag("devices"); Text("Asignaciones").tag("assignments"); Text("Ajustes").tag("settings")
+     Picker(L10n.tr("Sección"),selection:$page) {
+      Text(L10n.tr("Dispositivos")).tag("devices"); Text(L10n.tr("Asignaciones")).tag("assignments"); Text(L10n.tr("Ajustes")).tag("settings")
      }.pickerStyle(.segmented)
-     Label(store.capturing && store.enabled ? "Korda activa" : "Asignaciones pausadas",systemImage:store.capturing && store.enabled ? "checkmark.circle.fill" : "pause.circle").foregroundStyle(.secondary)
-     if store.isRestoring { ProgressView("Restaurando las teclas…") }
-     if !store.exclusiveStatus.isEmpty { Text(store.exclusiveStatus).font(.caption).foregroundStyle(.secondary) }
-     Text("\(store.usbDevices.count) entradas USB detectadas · incluye hubs y dispositivos internos").font(.caption)
+     Label(store.capturing && store.enabled ? L10n.tr("Korda activa") : L10n.tr("Asignaciones pausadas"),systemImage:store.capturing && store.enabled ? "checkmark.circle.fill" : "pause.circle").foregroundStyle(.secondary)
+     if store.isRestoring { ProgressView(L10n.tr("Restaurando las teclas…")) }
+     if !store.exclusiveStatus.isEmpty { Text(L10n.display(store.exclusiveStatus)).font(.caption).foregroundStyle(.secondary) }
+     Text(L10n.tr("{{0}} entradas USB detectadas · incluye hubs y dispositivos internos", String(describing: store.usbDevices.count))).font(.caption)
      if let warning = store.usbInventoryWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
 
      if IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) != kIOHIDAccessTypeGranted || !AXIsProcessTrusted() {
-      HStack { Label("Korda necesita permisos para controlar tus dispositivos",systemImage:"lock.shield"); Spacer(); Button("Revisar permisos") { page = "settings"; settingsPage = "permissions" } }.padding().background(.orange.opacity(0.1),in:RoundedRectangle(cornerRadius:12))
+      HStack { Label(L10n.tr("Korda necesita permisos para controlar tus dispositivos"),systemImage:"lock.shield"); Spacer(); Button(L10n.tr("Revisar permisos")) { page = "settings"; settingsPage = "permissions" } }.padding().background(.orange.opacity(0.1),in:RoundedRectangle(cornerRadius:12))
      }
      if page == "devices" { deviceContent }
      if page == "settings" { settingsContent }
      if page == "assignments" {
      Divider()
-     Text("Asignaciones guardadas").font(.headline)
-     Text(store.actionStatus).font(.caption).textSelection(.enabled)
+     Text(L10n.tr("Asignaciones guardadas")).font(.headline)
+     Text(L10n.display(store.actionStatus)).font(.caption).textSelection(.enabled)
      savedMappingRows
-     Text("Las asignaciones se ejecutan mientras esta aplicación permanece abierta y la captura está activa. No instala controladores ni cambia permisos del sistema. Las teclas de texto y Fn no se remapean; las rutas propietarias requieren autorización explícita por receptor y slot.").font(.caption).foregroundStyle(.secondary)
+     Text(L10n.tr("Las asignaciones se ejecutan mientras esta aplicación permanece abierta y la captura está activa. No instala controladores ni cambia permisos del sistema. Las teclas de texto y Fn no se remapean; las rutas propietarias requieren autorización explícita por receptor y slot.")).font(.caption).foregroundStyle(.secondary)
      }
     }.padding(24)
    }
   }.frame(minWidth: 950, minHeight: 650)
+   .onChange(of: language.preference) { _,_ in store.refresh() }
    .onChange(of: store.selected) { _, selected in
     if selected != store.learnedEndpoint {
-     store.lastSource = ""; store.lastEvent = "Sin eventos"
+     store.lastSource = ""; store.lastEvent = L10n.tr("Sin eventos")
     }
     if let selected,let target = store.verifiedIdentities[selected],target.kind == 1,store.keyboardCatalogs[selected] == nil,store.canManageReceiver(target.endpoint) { store.discoverKeyboard(target) }
    }
    .alert(item:$managementPrompt) { prompt in
     switch prompt {
     case .pair(let endpoint):
-     return Alert(title:Text("Emparejar con \(store.receiverName(endpoint))"),message:Text("Se abrirá una ventana de 60 segundos para vincular un dispositivo cercano compatible. Apaga y enciende sólo el que quieras añadir. Las asignaciones de este receptor se pausarán durante la operación."),primaryButton:.default(Text("Abrir emparejamiento")){ store.manageReceiver(endpoint,command:.openPairing) },secondaryButton:.cancel(Text("Cancelar")))
+     return Alert(title:Text(L10n.tr("Emparejar con {{0}}", String(describing: store.receiverName(endpoint)))),message:Text(L10n.tr("Se abrirá una ventana de 60 segundos para vincular un dispositivo cercano compatible. Apaga y enciende sólo el que quieras añadir. Las asignaciones de este receptor se pausarán durante la operación.")),primaryButton:.default(Text(L10n.tr("Abrir emparejamiento"))){ store.manageReceiver(endpoint,command:.openPairing) },secondaryButton:.cancel(Text(L10n.tr("Cancelar"))))
     case .unpair(let target):
-     return Alert(title:Text("¿Quitar \(target.displayName)?"),message:Text("\(store.receiverName(target.endpoint)) · posición \(target.slot) · HID++ \(String(format:"%04X",target.wirelessID)). Dejará de controlar este Mac a través de este receptor. Necesitarás volver a emparejarlo para recuperarlo. Comprueba que tienes otro teclado o ratón disponible."),primaryButton:.destructive(Text("Quitar del receptor")){ store.manageReceiver(target.endpoint,command:.unpair(slot:target.slot),expectedWPID:target.wirelessID) },secondaryButton:.cancel(Text("Cancelar")))
+     return Alert(title:Text(L10n.tr("¿Quitar {{0}}?", String(describing: target.displayName))),message:Text(L10n.tr("{{0}} · posición {{1}} · HID++ {{2}}. Dejará de controlar este Mac a través de este receptor. Necesitarás volver a emparejarlo para recuperarlo. Comprueba que tienes otro teclado o ratón disponible.", String(describing: store.receiverName(target.endpoint)), String(describing: target.slot), String(describing: String(format:"%04X",target.wirelessID)))),primaryButton:.destructive(Text(L10n.tr("Quitar del receptor"))){ store.manageReceiver(target.endpoint,command:.unpair(slot:target.slot),expectedWPID:target.wirelessID) },secondaryButton:.cancel(Text(L10n.tr("Cancelar"))))
     }
    }
  }
@@ -1358,28 +1366,29 @@ final class KordaAppDelegate: NSObject, NSApplicationDelegate {
  }
 }
 struct KordaMenu: View {
+ @ObservedObject private var language = LanguageSettings.shared
  @ObservedObject var store: DeviceStore
  @Environment(\.openWindow) private var openWindow
  @State private var loginEnabled = SMAppService.mainApp.status == .enabled
  @State private var loginMessage = ""
  var body: some View {
-  Text(store.capturing ? (store.enabled ? "Asignaciones activas" : "Captura activa · asignaciones pausadas") : "Captura y asignaciones pausadas")
-  if store.audio.isProcessing { Text("Control digital de audio activo") }
-  Button(store.hasBackgroundActivity ? "Pausar" : "Reanudar asignaciones") {
+  Text(store.capturing ? (store.enabled ? L10n.tr("Asignaciones activas") : L10n.tr("Captura activa · asignaciones pausadas")) : L10n.tr("Captura y asignaciones pausadas"))
+  if store.audio.isProcessing { Text(L10n.tr("Control digital de audio activo")) }
+  Button(store.hasBackgroundActivity ? L10n.tr("Pausar") : L10n.tr("Reanudar asignaciones")) {
    if store.hasBackgroundActivity { store.pauseBackground() } else { store.resumeBackground() }
   }.disabled(store.isRestoring)
-  Button("Abrir ajustes") { openWindow(id:"korda-settings"); NSApp.activate(ignoringOtherApps:true) }
+  Button(L10n.tr("Abrir ajustes")) { openWindow(id:"korda-settings"); NSApp.activate(ignoringOtherApps:true) }
   Divider()
-  Toggle("Iniciar con macOS", isOn:Binding(get:{loginEnabled},set:{ desired in
+  Toggle(L10n.tr("Iniciar con macOS"), isOn:Binding(get:{loginEnabled},set:{ desired in
    do {
     if desired { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
     loginEnabled = SMAppService.mainApp.status == .enabled
-    loginMessage = SMAppService.mainApp.status == .requiresApproval ? "Pendiente de aprobación en Ítems de inicio" : ""
-   } catch { loginEnabled = SMAppService.mainApp.status == .enabled; loginMessage = "No se pudo cambiar el inicio automático: \(error.localizedDescription)" }
+    loginMessage = SMAppService.mainApp.status == .requiresApproval ? L10n.tr("Pendiente de aprobación en Ítems de inicio") : ""
+   } catch { loginEnabled = SMAppService.mainApp.status == .enabled; loginMessage = L10n.tr("No se pudo cambiar el inicio automático: {{0}}", String(describing: error.localizedDescription)) }
   }))
   if !loginMessage.isEmpty { Text(loginMessage) }
   Divider()
-  Button("Salir de Korda") { NSApp.terminate(nil) }.keyboardShortcut("q")
+  Button(L10n.tr("Salir de Korda")) { NSApp.terminate(nil) }.keyboardShortcut("q")
  }
 }
 @main struct KordaApp: App {

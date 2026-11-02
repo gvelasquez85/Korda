@@ -37,8 +37,8 @@ struct HIDDeviceIdentity {
   if wirelessID == 0x4024 { return "K400r" }
   if wirelessID == 0x1028 { return "M570" }
   if let name, !name.trimmingCharacters(in:.whitespaces).isEmpty { return name }
-  return "\(categoryName) sin identificar"
+  return L10n.tr("{{0}} sin identificar", String(describing: categoryName))
  }
- var categoryName: String { kind == 1 ? "Teclado" : (kind == 2 ? "Ratón" : "Dispositivo") }
- var label: String { "\(name ?? (wirelessID == 0x1028 ? "M570 (WPID del fabricante)" : "Dispositivo HID++")) · WPID \(String(format:"%04X",wirelessID)) · posición \(slot)" }
+ var categoryName: String { kind == 1 ? L10n.tr("Teclado") : (kind == 2 ? L10n.tr("Ratón") : L10n.tr("Dispositivo")) }
+ var label: String { L10n.tr("{{0}} · WPID {{1}} · posición {{2}}", String(describing: name ?? (wirelessID == 0x1028 ? L10n.tr("M570 (WPID del fabricante)") : L10n.tr("Dispositivo HID++"))), String(describing: String(format:"%04X",wirelessID)), String(describing: slot)) }
 }

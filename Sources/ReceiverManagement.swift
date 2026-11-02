@@ -13,9 +13,9 @@ enum ReceiverManagementCommand: Equatable {
  var slot: UInt8? { if case let .unpair(slot) = self { return slot }; return nil }
  var label: String {
   switch self {
-  case .openPairing: return "Abrir emparejamiento"
-  case .closePairing: return "Cerrar emparejamiento"
-  case .unpair(let slot): return "Desvincular posición \(slot)"
+  case .openPairing: return L10n.tr("Abrir emparejamiento")
+  case .closePairing: return L10n.tr("Cerrar emparejamiento")
+  case .unpair(let slot): return L10n.tr("Desvincular posición {{0}}", String(describing: slot))
   }
  }
  var packet: [UInt8]? {

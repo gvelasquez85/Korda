@@ -48,12 +48,12 @@ final class KeyboardDiversionController {
   }
  }
  func activate(source:String,lease:KeyboardDiversionLease,completion:@escaping Completion) {
-  guard !busy,!restoring,queuedRestores.isEmpty,!planners.values.contains(where:{$0.restorationRequired && $0.phase != .active}),planners[source] == nil,lease.isEligible else{completion(false,"Hay una operación o restauración pendiente.");return}
+  guard !busy,!restoring,queuedRestores.isEmpty,!planners.values.contains(where:{$0.restorationRequired && $0.phase != .active}),planners[source] == nil,lease.isEligible else{completion(false,L10n.tr("Hay una operación o restauración pendiente."));return}
   busy=true;stateChanged?()
   read(lease){[weak self] baseline in
    guard let self else{return}
    var planner=KeyboardDiversionPlanner(lease:lease)
-   guard let baseline,planner.acceptBaseline(baseline) else{self.end(false,"No se obtuvo una base exclusiva válida.",completion);return}
+   guard let baseline,planner.acceptBaseline(baseline) else{self.end(false,L10n.tr("No se obtuvo una base exclusiva válida."),completion);return}
    self.planners[source]=planner
    self.request(lease,function:3,packet:{ id in
     guard var current=self.planners[source] else{return nil};let packet=current.prepareEnable(softwareID:id);self.planners[source]=current;return packet
@@ -61,9 +61,9 @@ final class KeyboardDiversionController {
     // Even an error is followed by readback: dispatch may have changed firmware.
     self.read(lease){ snapshot in
      if case .payload?=reply,let snapshot,var current=self.planners[source],current.observeEnabled(snapshot) {
-      self.planners[source]=current;self.end(true,"Desvío confirmado mediante lectura.",completion)
+      self.planners[source]=current;self.end(true,L10n.tr("Desvío confirmado mediante lectura."),completion)
      } else {
-      self.restoreOne(source){ restored,_ in self.end(false,restored ? "Activación no confirmada; estado original recuperado." : "Activación incierta; restauración pendiente.",completion) }
+      self.restoreOne(source){ restored,_ in self.end(false,restored ? L10n.tr("Activación no confirmada; estado original recuperado.") : L10n.tr("Activación incierta; restauración pendiente."),completion) }
      }
     }
    }
@@ -77,27 +77,27 @@ final class KeyboardDiversionController {
   }
  }
  private func restoreOne(_ source:String,completion:@escaping Completion) {
-  guard let planner=planners[source],planner.restorationRequired else{planners.removeValue(forKey:source);completion(true,"Sin obligación.");return}
+  guard let planner=planners[source],planner.restorationRequired else{planners.removeValue(forKey:source);completion(true,L10n.tr("Sin obligación."));return}
   let lease=planner.lease
   read(lease){[weak self] snapshot in
    guard let self else{return}
-   guard let snapshot,var current=self.planners[source] else{completion(false,"No se pudo leer para restaurar.");return}
+   guard let snapshot,var current=self.planners[source] else{completion(false,L10n.tr("No se pudo leer para restaurar."));return}
    // Reserve this SWID for the subsequent setter; request increments identically.
    let next:UInt8=self.swid == 15 ? 1 : self.swid+1
    let bytes=current.prepareRestore(current:snapshot,softwareID:next)
    self.planners[source]=current
-   if !current.restorationRequired { self.planners.removeValue(forKey:source);completion(true,"Restauración observada.");return }
-   guard let bytes else{completion(false,"Conflicto o estado no verificable; no se sobrescribió.");return}
+   if !current.restorationRequired { self.planners.removeValue(forKey:source);completion(true,L10n.tr("Restauración observada."));return }
+   guard let bytes else{completion(false,L10n.tr("Conflicto o estado no verificable; no se sobrescribió."));return}
    self.request(lease,function:3,packet:{_ in bytes}){ _ in
     self.read(lease){ result in
-     guard let result,var latest=self.planners[source],latest.observeRestored(result) else{completion(false,"Restauración sin confirmar.");return}
-     self.planners.removeValue(forKey:source);completion(true,"Restauración confirmada.")
+     guard let result,var latest=self.planners[source],latest.observeRestored(result) else{completion(false,L10n.tr("Restauración sin confirmar."));return}
+     self.planners.removeValue(forKey:source);completion(true,L10n.tr("Restauración confirmada."))
     }
    }
   }
  }
  func restore(source:String,completion:@escaping Completion) {
-  guard !busy,!restoring else { completion(false,"Hay una operación en curso; la restauración individual sigue pendiente.");return }
+  guard !busy,!restoring else { completion(false,L10n.tr("Hay una operación en curso; la restauración individual sigue pendiente."));return }
   restoring=true;busy=true;stateChanged?()
   restoreOne(source){[weak self] ok,message in
    guard let self else{return};self.restoring=false;self.end(ok,message,completion)
@@ -107,7 +107,7 @@ final class KeyboardDiversionController {
   guard !busy,!restoring else{queuedRestores.append(completion);return}
   restoring=true;busy=true;stateChanged?()
   restoreQueue(Array(planners.keys),success:true){[weak self] ok in
-   guard let self else{return};self.restoring=false;self.end(ok,ok ? "Restauraciones verificadas." : "Quedan restauraciones pendientes.",completion)
+   guard let self else{return};self.restoring=false;self.end(ok,ok ? L10n.tr("Restauraciones verificadas.") : L10n.tr("Quedan restauraciones pendientes."),completion)
   }
  }
  private func restoreQueue(_ sources:[String],success:Bool,completion:@escaping(Bool)->Void) {

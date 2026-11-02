@@ -19,29 +19,29 @@ struct USBDeviceInfo: Identifiable {
  var category: String {
   if usbClass == 0 || usbClass == 239 {
    let classes = Set(interfaceClasses)
-   if classes.contains(14) && classes.contains(1) { return "Cámara y audio USB" }
-   if classes.contains(14) { return "Vídeo USB" }
-   if classes.contains(1) { return "Audio USB" }
-   if classes.contains(8) { return "Almacenamiento USB" }
-   if classes.contains(3) { return "Dispositivo HID" }
-   if classes.count > 1 { return "Dispositivo compuesto USB" }
+   if classes.contains(14) && classes.contains(1) { return L10n.tr("Cámara y audio USB") }
+   if classes.contains(14) { return L10n.tr("Vídeo USB") }
+   if classes.contains(1) { return L10n.tr("Audio USB") }
+   if classes.contains(8) { return L10n.tr("Almacenamiento USB") }
+   if classes.contains(3) { return L10n.tr("Dispositivo HID") }
+   if classes.count > 1 { return L10n.tr("Dispositivo compuesto USB") }
   }
-  switch usbClass { case 1: return "Audio USB"; case 3: return "Dispositivo HID"; case 8: return "Almacenamiento USB"; case 9: return "Hub USB"; case 14: return "Vídeo USB"; default: return "Dispositivo USB" }
+  switch usbClass { case 1: return L10n.tr("Audio USB"); case 3: return L10n.tr("Dispositivo HID"); case 8: return L10n.tr("Almacenamiento USB"); case 9: return L10n.tr("Hub USB"); case 14: return L10n.tr("Vídeo USB"); default: return L10n.tr("Dispositivo USB") }
  }
  var details: [String] {
-  var rows = ["Tipo: \(category)"]
-  if let manufacturer { rows.append("Fabricante: \(manufacturer)") }
-  if let vendorID { rows.append(String(format:"Identificador de fabricante: %04X",vendorID)) }
-  if let productID { rows.append(String(format:"Identificador de producto: %04X",productID)) }
-  if let locationID { rows.append(String(format:"Ubicación USB: %08X",locationID)) }
-  if let usbClass { rows.append("Clase USB: \(usbClass)") }
-  if !interfaceClasses.isEmpty { rows.append("Clases de interfaz USB: " + interfaceClasses.map(String.init).joined(separator:", ")) }
-  if let speed { rows.append("Código de velocidad USB declarado: \(speed)") }
+  var rows = [L10n.tr("Tipo: {{0}}", String(describing: category))]
+  if let manufacturer { rows.append(L10n.tr("Fabricante: {{0}}", String(describing: manufacturer))) }
+  if let vendorID { rows.append(String(format:L10n.tr("Identificador de fabricante: %04X"),vendorID)) }
+  if let productID { rows.append(String(format:L10n.tr("Identificador de producto: %04X"),productID)) }
+  if let locationID { rows.append(String(format:L10n.tr("Ubicación USB: %08X"),locationID)) }
+  if let usbClass { rows.append(L10n.tr("Clase USB: {{0}}", String(describing: usbClass))) }
+  if !interfaceClasses.isEmpty { rows.append(L10n.tr("Clases de interfaz USB: ") + interfaceClasses.map(String.init).joined(separator:", ")) }
+  if let speed { rows.append(L10n.tr("Código de velocidad USB declarado: {{0}}", String(describing: speed))) }
   return rows
  }
  static func friendlyName(_ candidate: String?) -> String {
   let value = candidate?.trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
-  return value.isEmpty ? "Dispositivo USB" : value
+  return value.isEmpty ? L10n.tr("Dispositivo USB") : value
  }
 }
 struct USBInventorySnapshot {
@@ -56,7 +56,7 @@ enum USBInventory {
   for serviceClass in ["IOUSBHostDevice","IOUSBDevice"] {
    var iterator: io_iterator_t = 0
    let result = IOServiceGetMatchingServices(kIOMainPortDefault,IOServiceMatching(serviceClass),&iterator)
-   guard result == KERN_SUCCESS else { errors.append("No se pudo consultar \(serviceClass) (\(result))."); continue }
+   guard result == KERN_SUCCESS else { errors.append(L10n.tr("No se pudo consultar {{0}} ({{1}}).", String(describing: serviceClass), String(describing: result))); continue }
    defer { IOObjectRelease(iterator) }
    while true {
     let service = IOIteratorNext(iterator)

@@ -1,44 +1,54 @@
 # Korda
 
-Aplicación nativa experimental para configurar controles de dispositivos en macOS. Versión en preparación: 0.9.1; todavía no es una versión 1.0 validada.
+[Español](README.es.md) · English
 
-## Funcionalidades
+Experimental native macOS app for configuring compatible device controls. Current development version: **0.10.0**. This is not a validated 1.0 release.
 
-- Inventario de dispositivos USB, interfaces HID y cámaras. Los dispositivos sin configuración implementada muestran información.
-- Identificación HID++ de periféricos compatibles detrás de receptores y administración de emparejamiento.
-- Asignaciones de botones y teclas compatibles a acciones multimedia, atajos de teclado y apertura de una aplicación elegida.
-- Asignaciones persistentes, editor por dispositivo y sección de ajustes y diagnósticos.
-- Barra de menús: pausar, reanudar, abrir ajustes, salir e inicio opcional con macOS.
-- Reemplazo exclusivo experimental para controles HID++ 1B04 compatibles, con comprobación del desvío y restauración al pausar o salir normalmente.
+## What you can do
 
-## Compatibilidad y límites
+- Browse USB devices, HID interfaces, audio outputs and cameras, with readable device names where identification is available.
+- Identify compatible wireless devices behind receivers using HID++ and manage pairing.
+- Assign supported buttons and keys to media actions, keyboard shortcuts, or an application you choose.
+- Keep assignments running from the menu bar, pause them, open settings, quit, or optionally start Korda with macOS.
+- Experimentally replace compatible HID++ 1B04 controls, with diversion readback and restoration on normal pause or quit.
+- Enable optional software volume and mute for a chosen digital audio output, then assign Korda volume actions to a device control.
+- Choose English, Spanish, or the system language under **Settings → General → Language**.
 
-La compilación actual apunta a macOS 14 o posterior en Intel. Apple Silicon no está validado. Las pruebas físicas realizadas durante el desarrollo incluyen controles del M570 y funciones multimedia de K540/K400r; no constituyen garantía para todos los modelos o receptores.
+## Requirements and limits
 
-El reemplazo exclusivo necesita una identificación reciente y capacidades compatibles del control. Su validación física completa está pendiente. La recuperación tras cierre forzado, caída del proceso o desconexión no está terminada: durante las pruebas se debe usar **Pausar** o **Salir** y esperar la restauración. Las acciones adicionales conservan la función original.
+The current build targets **Intel Macs with macOS 14 or later**. Apple Silicon has not been validated. Digital audio control requires **macOS 14.2 or later**.
 
-Las cámaras se inventarían; no se ofrecen todavía ajustes UVC. Las teclas de escritura ordinarias y Fn no se remapean. La existencia de un dispositivo en el inventario no implica que sus ajustes estén implementados.
+Physical development tests have covered M570 buttons and K540/K400r media controls. They do not establish compatibility with every model or receiver.
 
-El control de volumen digital experimental utiliza CoreAudio en macOS 14.2 o posterior y requiere permiso de audio del sistema y activación explícita. Sólo admite audio Float32 intercalado mono o estéreo. Las acciones se vinculan al UID de la salida elegida. Se detiene al pausar, salir o entrar en reposo. Las pruebas audibles en hardware siguen pendientes; no se declara compatibilidad universal. Consulta [Volumen digital](docs/digital-audio.md).
+Exclusive key replacement requires a fresh device identification and compatible control capabilities. Full hardware validation is pending. Recovery after a forced quit, crash or disconnection is not finished: use **Pause** or **Quit** and wait for restoration during testing. Additional actions retain the original behavior.
 
-## Compilar
+Ordinary typing keys and Fn are not remapped. Cameras are inventoried; UVC image controls are not implemented. Appearing in the device list does not mean every hardware setting can be changed.
 
-Se necesitan macOS y las herramientas de desarrollo de Apple con Swift:
+Digital audio processing is experimental. It requires explicit activation and macOS system audio access. It currently supports interleaved mono/stereo Float32 PCM, including sample-rate conversion such as 44.1 kHz to 48 kHz. Actions target the selected output UID. Processing stops on pause, quit or sleep. Audible hardware validation is still pending; universal HDMI, DisplayPort and USB compatibility is not claimed.
+
+## Build and test
+
+Install Apple's command line developer tools, then run:
 
 ```sh
 ./build.sh
+./scripts/test.sh
 ```
 
-El resultado es `build/Korda.app`. La firma local es ad hoc, sin notarización ni certificado Developer ID. Esta configuración de desarrollo no equivale a una distribución pública firmada. El script contiene una adaptación local del módulo Swift de las Command Line Tools; revisar su aplicabilidad en otro equipo.
+The app is written to `build/Korda.app`. Tests do not start system audio capture or write device firmware settings. The build includes a local Swift module-map workaround; its applicability on another development machine must be checked.
 
-Para ejecutar las pruebas del modelo y captura, el propio script de compilación ejecuta `Tests/MappingTests.swift`. Hay pruebas adicionales en `Tests/` y scripts de decodificación en la raíz; la presencia de estos archivos no acredita que toda la matriz de hardware haya sido probada.
+`./release.sh` creates an optimized Intel build, runs checks and packages the app. Local builds use an **ad hoc signature**, without Developer ID signing or notarization. This is not a notarized public installer.
 
-## Permisos y privacidad
+Language changes apply to the interface and new messages. Existing diagnostic history may keep its previous language until refreshed. macOS-owned dialogs use the system language.
 
-Monitorización de entrada permite recibir controles y Accesibilidad permite emitir atajos y acciones multimedia. macOS puede exigir volver a autorizar una compilación nueva firmada ad hoc. Korda no concede estos permisos por sí misma ni instala un controlador. Su política de captura excluye el texto ordinario escrito; los diagnósticos de hardware deben tratarse como información local y revisarse antes de compartirlos.
+## Privacy and permissions
 
-## Estado de publicación
+Input Monitoring receives device controls. Accessibility emits keyboard shortcuts and system media actions. Digital volume processing also needs system audio access. macOS may require reauthorization after a new ad hoc build. Korda does not grant its own permissions or install a driver.
 
-El destino aprobado es el repositorio público gvelasquez85/Korda. El código se ofrece bajo [licencia MIT](LICENSE). El código se publica como desarrollo experimental. Una release estable 1.0 y la distribución notarizada siguen pendientes.
+Digital audio is processed locally in memory; it is not recorded or uploaded. Ordinary typed text is excluded by the input capture policy. Hardware diagnostics remain local and should be reviewed before sharing.
 
-Korda es un proyecto independiente; los nombres de modelos identifican hardware y no implican afiliación ni respaldo del fabricante.
+## Status and license
+
+Source is published at [gvelasquez85/Korda](https://github.com/gvelasquez85/Korda) under the [MIT license](LICENSE). A stable 1.0 release and notarized distribution remain pending.
+
+Korda is an independent project. Hardware model names identify devices and do not imply manufacturer affiliation or endorsement.

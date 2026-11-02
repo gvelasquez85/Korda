@@ -1,0 +1,2 @@
+"NSAudioCaptureUsageDescription" = "Korda procesa localmente el audio de la salida elegida para ajustar su volumen. No graba ni envía audio.";
+"CFBundleDisplayName" = "Korda";

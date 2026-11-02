@@ -6,8 +6,8 @@ struct CapturePolicy {
  }
  // Consumer usages from Apple's IOHIDUsageTables.h; names describe declarations, not tested behavior.
  static func label(page: UInt32, usage: UInt32) -> String {
-  if page == 12, let name = [UInt32(233): "Subir volumen", 234: "Bajar volumen", 226: "Silenciar", 205: "Reproducir / pausa", 181: "Pista siguiente", 182: "Pista anterior", 402: "Calculadora", 545: "Buscar", 549: "Navegador: adelante", 548: "Navegador: atrás", 547: "Inicio del navegador"][usage] { return name }
-  return "Página \(page) · botón \(usage)"
+  if page == 12, let name = [UInt32(233): L10n.tr("Subir volumen"), 234: L10n.tr("Bajar volumen"), 226: L10n.tr("Silenciar"), 205: L10n.tr("Reproducir / pausa"), 181: L10n.tr("Pista siguiente"), 182: L10n.tr("Pista anterior"), 402: L10n.tr("Calculadora"), 545: L10n.tr("Buscar"), 549: L10n.tr("Navegador: adelante"), 548: L10n.tr("Navegador: atrás"), 547: L10n.tr("Inicio del navegador")][usage] { return name }
+  return L10n.tr("Página {{0}} · botón {{1}}", String(describing: page), String(describing: usage))
  }
 }
 struct ApplicationTarget: Codable, Equatable {
@@ -41,8 +41,8 @@ struct Mapping: Codable, Equatable, Identifiable {
  }
  var isDigitalVolumeAction:Bool { ["digitalVolumeUp","digitalVolumeDown","digitalMute"].contains(action) }
  var actionLabel: String {
-  if isDigitalVolumeAction { return ["digitalVolumeUp":"Subir volumen · Korda","digitalVolumeDown":"Bajar volumen · Korda","digitalMute":"Silenciar · Korda"][action]! }
-  if action == "launchApplication" { return "Abrir " + (application?.name ?? "aplicación sin seleccionar") }
+  if isDigitalVolumeAction { return ["digitalVolumeUp":L10n.tr("Subir volumen · Korda"),"digitalVolumeDown":L10n.tr("Bajar volumen · Korda"),"digitalMute":L10n.tr("Silenciar · Korda")][action]! }
+  if action == "launchApplication" { return L10n.tr("Abrir ") + (application?.name ?? L10n.tr("aplicación sin seleccionar")) }
   if action == "shortcut" {
    var prefix = ""
    if modifiers & 1048576 != 0 { prefix += "⌘" }
@@ -50,25 +50,25 @@ struct Mapping: Codable, Equatable, Identifiable {
    if modifiers & 524288 != 0 { prefix += "⌥" }
    if modifiers & 262144 != 0 { prefix += "⌃" }
    let punctuation: [UInt16:String] = [33:"[",30:"]"]
-   let key = NamedShortcutKey.all.first(where:{$0.keyCode == keyCode})?.label ?? punctuation[keyCode] ?? "Tecla \(keyCode)"
+   let key = NamedShortcutKey.all.first(where:{$0.keyCode == keyCode})?.label ?? punctuation[keyCode] ?? L10n.tr("Tecla {{0}}", String(describing: keyCode))
    return prefix + key
   }
-  return ["volumeUp":"Subir volumen","volumeDown":"Bajar volumen","mute":"Silenciar","playPause":"Reproducir / pausa","next":"Pista siguiente","previous":"Pista anterior","launchCalculator":"Abrir Calculadora"][action] ?? action
+  return ["volumeUp":L10n.tr("Subir volumen"),"volumeDown":L10n.tr("Bajar volumen"),"mute":L10n.tr("Silenciar"),"playPause":L10n.tr("Reproducir / pausa"),"next":L10n.tr("Pista siguiente"),"previous":L10n.tr("Pista anterior"),"launchCalculator":L10n.tr("Abrir Calculadora")][action] ?? action
  }
  var controlLabel: String {
   if source.hasPrefix("keyboard|"),let tail = source.components(separatedBy:"|usage=").last,let usage = UInt32(tail) { return CapturePolicy.label(page:12,usage:usage) }
   if source.hasPrefix("receiver|"), let tail = source.components(separatedBy:"|button=").last, let button = UInt32(tail) {
-   return button == 4 ? "Atrás (botón 4)" : button == 5 ? "Adelante (botón 5)" : "Botón \(button)"
+   return button == 4 ? L10n.tr("Atrás (botón 4)") : button == 5 ? L10n.tr("Adelante (botón 5)") : L10n.tr("Botón {{0}}", String(describing: button))
   }
   let parts = source.split(separator:":")
   if parts.count >= 3, let page = UInt32(parts[parts.count-2]), let usage = UInt32(parts[parts.count-1]) { return CapturePolicy.label(page:page,usage:usage) }
-  return "Control sin identificar"
+  return L10n.tr("Control sin identificar")
  }
 }
 
 enum ReceiverMappingRoute: String, Codable {
  case djMouse, synthetic1B04
- var label: String { self == .djMouse ? "DJ20 ratón" : "candidato 1B04" }
+ var label: String { self == .djMouse ? L10n.tr("DJ20 ratón") : L10n.tr("candidato 1B04") }
 }
 struct ReceiverMappingProfile: Codable, Equatable, Identifiable {
  let endpoint: String
@@ -86,10 +86,10 @@ struct ReceiverMappingProfile: Codable, Equatable, Identifiable {
  // Labels require explicit user confirmation; pairing can reuse the receiver slot.
  func buttonLabel(_ button: UInt8) -> String {
   if enrolled && buttonLabelsConfirmed && route == .synthetic1B04 {
-   if button == 4 { return "Atrás (botón 4, según prueba)" }
-   if button == 5 { return "Adelante (botón 5, según prueba)" }
+   if button == 4 { return L10n.tr("Atrás (botón 4, según prueba)") }
+   if button == 5 { return L10n.tr("Adelante (botón 5, según prueba)") }
   }
-  return "Botón \(button)"
+  return L10n.tr("Botón {{0}}", String(describing: button))
  }
 }
 struct ReceiverMappingDecision {
@@ -117,18 +117,18 @@ struct NamedShortcutKey: Identifiable {
  let label: String
  let keyCode: UInt16
  // Fixed macOS virtual key constants verified in HIToolbox/Events.h.
- static let all: [NamedShortcutKey] = [
-  .init(id:"left",label:"Flecha izquierda",keyCode:123),
-  .init(id:"right",label:"Flecha derecha",keyCode:124),
-  .init(id:"up",label:"Flecha arriba",keyCode:126),
-  .init(id:"down",label:"Flecha abajo",keyCode:125),
-  .init(id:"space",label:"Espacio",keyCode:49), .init(id:"return",label:"Retorno",keyCode:36),
-  .init(id:"tab",label:"Tabulador",keyCode:48), .init(id:"escape",label:"Escape",keyCode:53),
+ static var all: [NamedShortcutKey] { [
+  .init(id:"left",label:L10n.tr("Flecha izquierda"),keyCode:123),
+  .init(id:"right",label:L10n.tr("Flecha derecha"),keyCode:124),
+  .init(id:"up",label:L10n.tr("Flecha arriba"),keyCode:126),
+  .init(id:"down",label:L10n.tr("Flecha abajo"),keyCode:125),
+  .init(id:"space",label:L10n.tr("Espacio"),keyCode:49), .init(id:"return",label:L10n.tr("Retorno"),keyCode:36),
+  .init(id:"tab",label:L10n.tr("Tabulador"),keyCode:48), .init(id:"escape",label:L10n.tr("Escape"),keyCode:53),
   .init(id:"f1",label:"F1",keyCode:122), .init(id:"f2",label:"F2",keyCode:120),
   .init(id:"f3",label:"F3",keyCode:99), .init(id:"f4",label:"F4",keyCode:118),
   .init(id:"f5",label:"F5",keyCode:96), .init(id:"f6",label:"F6",keyCode:97),
   .init(id:"f7",label:"F7",keyCode:98), .init(id:"f8",label:"F8",keyCode:100),
   .init(id:"f9",label:"F9",keyCode:101), .init(id:"f10",label:"F10",keyCode:109),
   .init(id:"f11",label:"F11",keyCode:103), .init(id:"f12",label:"F12",keyCode:111)
- ]
+ ] }
 }

@@ -44,7 +44,7 @@ final class DigitalAudioController:ObservableObject {
  @Published private(set) var activeOutputUID:String?
  @Published private(set) var level:Double=0.5
  @Published private(set) var isMuted=false
- @Published private(set) var status="Control digital desactivado."
+ @Published private(set) var status=L10n.tr("Control digital desactivado.")
  var hasRestorationObligations:Bool {tap != 0 || aggregate != 0 || proc != nil || dsp != nil}
  private var tap:AudioObjectID=0
  private var aggregate:AudioObjectID=0
@@ -56,23 +56,23 @@ final class DigitalAudioController:ObservableObject {
  private var activationTime=Date.distantPast
  init(){refresh()}
  deinit{cleanup()}
- func refresh(){outputs=AudioOutputInfo.inventory();if let uid=activeOutputUID,!outputs.contains(where:{$0.id==uid}){if stop(){status="Salida desconectada. Control digital detenido."}}}
+ func refresh(){outputs=AudioOutputInfo.inventory();if let uid=activeOutputUID,!outputs.contains(where:{$0.id==uid}){if stop(){status=L10n.tr("Salida desconectada. Control digital detenido.")}}}
  func start(outputUID:String)throws {
   guard stop() else {throw DigitalAudioError.unsupported(status)}
-  guard #available(macOS 14.2,*) else{throw DigitalAudioError.unsupported("El control digital requiere macOS 14.2 o posterior.")}
+  guard #available(macOS 14.2,*) else{throw DigitalAudioError.unsupported(L10n.tr("El control digital requiere macOS 14.2 o posterior."))}
   do{try activate(outputUID:outputUID)}catch{if cleanup(){status=error.localizedDescription};throw error}
  }
  @available(macOS 14.2,*) private func activate(outputUID:String)throws {
   refresh()
-  guard let output=outputs.first(where:{$0.id==outputUID}) else{throw DigitalAudioError.unsupported("Salida no disponible.")}
+  guard let output=outputs.first(where:{$0.id==outputUID}) else{throw DigitalAudioError.unsupported(L10n.tr("Salida no disponible."))}
   var pid=ProcessInfo.processInfo.processIdentifier
   var own:AudioObjectID=0;var size=UInt32(MemoryLayout<AudioObjectID>.size)
   var address=AudioObjectPropertyAddress(mSelector:kAudioHardwarePropertyTranslatePIDToProcessObject,mScope:kAudioObjectPropertyScopeGlobal,mElement:0)
-  try checked(AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),&address,UInt32(MemoryLayout<pid_t>.size),&pid,&size,&own),"Identificar proceso de audio")
-  guard own != 0 else{throw DigitalAudioError.unsupported("No se pudo excluir Korda de la captura.")}
+  try checked(AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),&address,UInt32(MemoryLayout<pid_t>.size),&pid,&size,&own),L10n.tr("Identificar proceso de audio"))
+  guard own != 0 else{throw DigitalAudioError.unsupported(L10n.tr("No se pudo excluir Korda de la captura."))}
   let description=CATapDescription(__excludingProcesses:[NSNumber(value:own)],andDeviceUID:output.id,withStream:0)
-  description.name="Korda · control digital";description.isPrivate=true;description.muteBehavior = .mutedWhenTapped
-  try checked(AudioHardwareCreateProcessTap(description,&tap),"Crear captura de audio")
+  description.name=L10n.tr("Korda · control digital");description.isPrivate=true;description.muteBehavior = .mutedWhenTapped
+  try checked(AudioHardwareCreateProcessTap(description,&tap),L10n.tr("Crear captura de audio"))
   let tapFormat=try format(tap,selector:kAudioTapPropertyFormat,scope:kAudioObjectPropertyScopeGlobal)
   try validate(tapFormat)
   let dictionary:[String:Any]=[
@@ -83,59 +83,59 @@ final class DigitalAudioController:ObservableObject {
    kAudioAggregateDeviceSubDeviceListKey:[[kAudioSubDeviceUIDKey:output.id]],
    kAudioAggregateDeviceTapListKey:[[kAudioSubTapUIDKey:description.uuid.uuidString,kAudioSubTapDriftCompensationKey:true]],
    kAudioAggregateDeviceTapAutoStartKey:false]
-  try checked(AudioHardwareCreateAggregateDevice(dictionary as CFDictionary,&aggregate),"Crear ruta de audio")
+  try checked(AudioHardwareCreateAggregateDevice(dictionary as CFDictionary,&aggregate),L10n.tr("Crear ruta de audio"))
   let outFormat=try format(aggregate,selector:kAudioDevicePropertyStreamFormat,scope:kAudioDevicePropertyScopeOutput)
   try validate(outFormat)
-  guard outFormat.mChannelsPerFrame==tapFormat.mChannelsPerFrame else{throw DigitalAudioError.unsupported("Los formatos de entrada y salida no coinciden.")}
-  guard let state=dspCreateRates(tapFormat.mChannelsPerFrame,tapFormat.mSampleRate,outFormat.mSampleRate) else{throw DigitalAudioError.unsupported("Sin memoria para audio.")}
+  guard outFormat.mChannelsPerFrame==tapFormat.mChannelsPerFrame else{throw DigitalAudioError.unsupported(L10n.tr("Los formatos de entrada y salida no coinciden."))}
+  guard let state=dspCreateRates(tapFormat.mChannelsPerFrame,tapFormat.mSampleRate,outFormat.mSampleRate) else{throw DigitalAudioError.unsupported(L10n.tr("Sin memoria para audio."))}
   dsp=state;updateGain()
-  try checked(AudioDeviceCreateIOProcID(aggregate,dspCallback,state,&proc),"Preparar procesamiento")
-  try checked(AudioDeviceStart(aggregate,proc),"Iniciar control digital")
+  try checked(AudioDeviceCreateIOProcID(aggregate,dspCallback,state,&proc),L10n.tr("Preparar procesamiento"))
+  try checked(AudioDeviceStart(aggregate,proc),L10n.tr("Iniciar control digital"))
   activationTime=Date()
-  started=true;activeOutputUID=output.id;status="Ruta iniciada; esperando señal de audio: "+output.name
+  started=true;activeOutputUID=output.id;status=L10n.tr("Ruta iniciada; esperando señal de audio: ")+output.name
   timer=Timer.scheduledTimer(withTimeInterval:0.5,repeats:true){[weak self] _ in
    guard let self,let state=self.dsp else{return}
-   if Date().timeIntervalSince(self.activationTime)>30,dspFrames(state)==0 {if self.stop(){self.status="No se recibieron muestras. Reproduce audio, revisa permiso de audio del sistema y vuelve a activar."};return}
-   if dspFault(state) != 0 {if self.stop(){self.status="Formato de audio cambiado. Control detenido."};return}
-   if dspFrames(state)>0 {self.status="Control digital activo: "+output.name}
+   if Date().timeIntervalSince(self.activationTime)>30,dspFrames(state)==0 {if self.stop(){self.status=L10n.tr("No se recibieron muestras. Reproduce audio, revisa permiso de audio del sistema y vuelve a activar.")};return}
+   if dspFault(state) != 0 {if self.stop(){self.status=L10n.tr("Formato de audio cambiado. Control detenido.")};return}
+   if dspFrames(state)>0 {self.status=L10n.tr("Control digital activo: ")+output.name}
    guard let current=try? self.format(self.aggregate,selector:kAudioDevicePropertyStreamFormat,scope:kAudioDevicePropertyScopeOutput),
          let input=try? self.format(self.tap,selector:kAudioTapPropertyFormat,scope:kAudioObjectPropertyScopeGlobal),
          current.mSampleRate==outFormat.mSampleRate,current.mChannelsPerFrame==outFormat.mChannelsPerFrame,
          current.mFormatFlags==outFormat.mFormatFlags,current.mBitsPerChannel==outFormat.mBitsPerChannel,
          input.mSampleRate==tapFormat.mSampleRate,input.mChannelsPerFrame==tapFormat.mChannelsPerFrame,
          input.mFormatFlags==tapFormat.mFormatFlags,input.mBitsPerChannel==tapFormat.mBitsPerChannel else {
-    if self.stop(){self.status="Formato de audio cambiado o no disponible. Control detenido."};return
+    if self.stop(){self.status=L10n.tr("Formato de audio cambiado o no disponible. Control detenido.")};return
    }
    self.refresh()
   }
  }
  private func format(_ object:AudioObjectID,selector:AudioObjectPropertySelector,scope:AudioObjectPropertyScope)throws->AudioStreamBasicDescription {
   var address=AudioObjectPropertyAddress(mSelector:selector,mScope:scope,mElement:0);var value=AudioStreamBasicDescription();var size=UInt32(MemoryLayout.size(ofValue:value))
-  try checked(AudioObjectGetPropertyData(object,&address,0,nil,&size,&value),"Leer formato de audio");return value
+  try checked(AudioObjectGetPropertyData(object,&address,0,nil,&size,&value),L10n.tr("Leer formato de audio"));return value
  }
  private func validate(_ format:AudioStreamBasicDescription)throws {
   guard format.mFormatID==kAudioFormatLinearPCM,format.mFormatFlags & kAudioFormatFlagIsFloat != 0,
         format.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0,format.mFormatFlags & kAudioFormatFlagIsBigEndian == 0,
         format.mBitsPerChannel==32,(1...2).contains(format.mChannelsPerFrame),
         format.mBytesPerFrame==4*format.mChannelsPerFrame,format.mSampleRate>0 else{
-   throw DigitalAudioError.unsupported("Esta salida no ofrece PCM Float32 intercalado mono/estéreo compatible.")
+   throw DigitalAudioError.unsupported(L10n.tr("Esta salida no ofrece PCM Float32 intercalado mono/estéreo compatible."))
   }
  }
- @discardableResult func stop()->Bool{guard cleanup() else{return false};activeOutputUID=nil;status="Control digital desactivado; ruta original restaurada.";return true}
+ @discardableResult func stop()->Bool{guard cleanup() else{return false};activeOutputUID=nil;status=L10n.tr("Control digital desactivado; ruta original restaurada.");return true}
  @discardableResult private func cleanup()->Bool{
   timer?.invalidate();timer=nil
   if aggregate != 0,let proc {
    if started {
     let result=AudioDeviceStop(aggregate,proc)
-    guard result==0 else {status="No se confirmó la parada de audio (\(result)). Recursos retenidos; reintenta detener.";return false}
+    guard result==0 else {status=L10n.tr("No se confirmó la parada de audio ({{0}}). Recursos retenidos; reintenta detener.", String(describing: result));return false}
    }
    started=false;activeOutputUID=nil
    let result=AudioDeviceDestroyIOProcID(aggregate,proc)
-   guard result==0 else{status="No se liberó el procesador de audio (\(result)). Recursos retenidos.";return false}
+   guard result==0 else{status=L10n.tr("No se liberó el procesador de audio ({{0}}). Recursos retenidos.", String(describing: result));return false}
   }
   started=false;activeOutputUID=nil;proc=nil
-  if aggregate != 0 {let result=AudioHardwareDestroyAggregateDevice(aggregate);guard result==0 else{status="No se pudo liberar la ruta de audio (\(result)). Reintenta detener.";return false};aggregate=0}
-  if #available(macOS 14.2,*),tap != 0 {let result=AudioHardwareDestroyProcessTap(tap);guard result==0 else{status="No se pudo liberar la captura (\(result)). Reintenta detener.";return false};tap=0}
+  if aggregate != 0 {let result=AudioHardwareDestroyAggregateDevice(aggregate);guard result==0 else{status=L10n.tr("No se pudo liberar la ruta de audio ({{0}}). Reintenta detener.", String(describing: result));return false};aggregate=0}
+  if #available(macOS 14.2,*),tap != 0 {let result=AudioHardwareDestroyProcessTap(tap);guard result==0 else{status=L10n.tr("No se pudo liberar la captura ({{0}}). Reintenta detener.", String(describing: result));return false};tap=0}
   if let dsp{dspDestroy(dsp)};dsp=nil
   return true
  }
